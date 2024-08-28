@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE Model SYSTEM "/opt/ericsson/arne/etc/arne6_3.dtd">
+<Model version="1" importVersion="6.3">
+	<Create>
+		<Site userLabel="CORE_CPG">
+			<altitude string="0"/>
+			<location string="CORE"/>
+			<longitude string="0"/>
+			<latitude string="0"/>
+			<worldTimeZoneId string="GB-Eire"/>
+			<freeText string=""/>
+			<datum string="wgs84"/>
+		</Site>
+      <ManagedElement sourceType="Redback">
+         <ManagedElementId string="CORE_CPG_TC1"/>
+         <primaryType type="CPG"/>
+         <managedElementType types="Servinggw"/>
+         <associatedSite string="Site=CORE_CPG"/>
+         <nodeVersion string="09B"/>
+         <platformVersion string=""/>
+         <swVersion string=""/>
+         <vendorName string=""/>
+         <userDefinedState string=""/>
+         <managedServiceAvailability int="1"/>
+         <isManaged boolean="true"/>
+         <connectionStatus string="ON"/>
+         <Connectivity>
+            <DEFAULT>
+               <emUrl url="https://192.168.0.4:80/"/>
+               <ipAddress ip_v4="192.168.0.4"/>
+               <hostname string=""/>
+               <nodeSecurityState state="ON"/>
+               <boardId string=""/>
+               <Protocol number="0">
+                  <protocolType string="HTTP"/>
+                  <port int="80"/>
+                  <protocolVersion string=""/>
+                  <securityName string=""/>
+                  <authenticationMethod string=""/>
+                  <encryptionMethod string=""/>
+                  <communityString string=""/>
+                  <context string=""/>
+                  <namingUrl string=""/>
+                  <namingPort int=""/>
+                  <notificationIRPAgentVersion string=""/>
+                  <alarmIRPAgentVersion string=""/>
+                  <notificationIRPNamingContext context=""/>
+                  <alarmIRPNamingContext context=""/>
+               </Protocol>
+               <Protocol number="1">
+                  <protocolType string="SSH"/>
+                  <port int="22"/>
+                  <protocolVersion string=""/>
+                  <securityName string=""/>
+                  <authenticationMethod string=""/>
+                  <encryptionMethod string=""/>
+                  <communityString string=""/>
+                  <context string=""/>
+                  <namingUrl string=""/>
+                  <namingPort int=""/>
+                  <notificationIRPAgentVersion string=""/>
+                  <alarmIRPAgentVersion string=""/>
+                  <notificationIRPNamingContext context=""/>
+                  <alarmIRPNamingContext context=""/>
+               </Protocol>
+               <Protocol number="2">
+                  <protocolType string="SNMP"/>
+                  <port int="0"/>
+                  <protocolVersion string=""/>
+                  <securityName string=""/>
+                  <authenticationMethod string=""/>
+                  <encryptionMethod string=""/>
+                  <communityString string=""/>
+                  <context string=""/>
+                  <namingUrl string=""/>
+                  <namingPort int=""/>
+                  <notificationIRPAgentVersion string=""/>
+                  <alarmIRPAgentVersion string=""/>
+                  <notificationIRPNamingContext context=""/>
+                  <alarmIRPNamingContext context=""/>
+               </Protocol>
+               <Browser>
+                  <browser string=""/>
+                  <browserURL string=""/>
+                  <bookname string=""/>
+               </Browser>
+            </DEFAULT>
+         </Connectivity>
+         <Tss>
+            <Entry>
+               <System string="CORE_CPG_TC1"/>
+               <Type string="ROOT"/>
+               <User string="1"/>
+               <Password string="1"/>
+            </Entry>
+            <Entry>
+               <System string="CORE_CPG_TC1"/>
+               <Type string="NORMAL"/>
+               <User string="1"/>
+               <Password string="1"/>
+            </Entry>
+            <Entry>
+               <System string="CORE_CPG_TC1"/>
+               <Type string="SECURE"/>
+               <User string="1"/>
+               <Password string="1"/>
+            </Entry>
+         </Tss>
+         <Relationship>
+            <AssociableNode TO_FDN="FtpServer=SMRSSLAVE-CORE-nedssv4,FtpService=corepmu-nedssv4" AssociationType="ManagedElement_to_neTransientPm"/>
+			
+			<AssociableNode TO_FDN="FtpServer=SMRSSLAVE-nedssv4,FtpService=pmup-nedssv4" AssociationType="ManagedElement_to_neTransientPm"/>
+			
+            <AssociableNode TO_FDN="ManagementNode=ONRM" AssociationType="MgmtAssociation"/>
+         </Relationship>
+      </ManagedElement>
+	</Create>
+</Model>
+

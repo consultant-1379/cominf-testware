@@ -1,0 +1,59 @@
+package com.ericsson.oss.cominf.test.cases;
+
+
+import com.ericsson.cifwk.taf.TestCase;
+import com.ericsson.cifwk.taf.TorTestCaseHelper;
+import com.ericsson.cifwk.taf.annotations.Context;
+import com.ericsson.cifwk.taf.guice.OperatorRegistry;
+import com.ericsson.oss.cominf.test.operators.CdbTestcasesOperator;
+
+import org.testng.annotations.Test;
+import org.testng.AssertJUnit;
+
+import com.ericsson.cifwk.taf.TestCase;
+import com.ericsson.cifwk.taf.TorTestCaseHelper;
+import com.ericsson.cifwk.taf.annotations.*;
+import com.ericsson.cifwk.taf.data.DataHandler;
+import com.ericsson.cifwk.taf.data.Host;
+import com.ericsson.oss.cominf.test.operators.CLIOperator;
+import com.ericsson.oss.cominf.test.operators.GenericOperator;
+import com.ericsson.cifwk.taf.guice.OperatorRegistry;
+import com.ericsson.cifwk.taf.tools.cli.CLICommandHelper;
+import com.ericsson.cifwk.taf.tools.cli.TimeoutException;
+
+import org.testng.annotations.BeforeSuite;
+import org.testng.annotations.Test;
+
+import java.io.FileNotFoundException;
+
+import javax.inject.Inject;
+
+public class UnitCase extends TorTestCaseHelper implements TestCase {
+	
+	    	  @Inject
+	    OperatorRegistry<GenericOperator> operatorRegistry;
+	    Host host;
+	    Host uas;
+	    Host ossmaster;
+	    Host omsrvm;
+	    Host omsrvs;
+	    Host omsas;
+	    Host nedss;
+
+	     @BeforeSuite
+	     public void initialise()
+	     {
+	         host = DataHandler.getHostByName("omsrvmroot");
+	         uas =  DataHandler.getHostByName("uas1root");
+	         ossmaster = DataHandler.getHostByName("masterroot");
+	         omsrvm = DataHandler.getHostByName("omsrvmroot");
+	         omsrvs = DataHandler.getHostByName("omsrvsroot");
+	         omsas = DataHandler.getHostByName("omsasroot");
+	         nedss = DataHandler.getHostByName("nedss");
+	         
+	     } 
+
+
+
+
+

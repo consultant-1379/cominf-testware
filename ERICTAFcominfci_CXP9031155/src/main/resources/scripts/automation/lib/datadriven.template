@@ -1,0 +1,4 @@
+dataprovider.##CSVNAME##.type=csv
+dataprovider.##CSVNAME##.location=##CSVNAME##.csv
+dataprovider.##CSVNAME##.csv.strategy=stop_on_end
+

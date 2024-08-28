@@ -1,0 +1,15 @@
+<!DOCTYPE suite SYSTEM "http://testng.org/testng-1.0.dtd" >
+<suite name="ericOcsKgb">
+    <test name="ericOcsKgb">
+        <classes>
+            <class name="com.ericsson.oss.cominf.test.cases.CdbTestcases"/>
+            <class name="com.ericsson.oss.cominf.test.cases.ericOCS"/>
+	        <methods>
+	        			 <exclude name="OSS40739Func10" />
+            </methods>
+	    <class name="com.ericsson.oss.cominf.test.cases.cominfOthers"/>
+        </classes>
+  </test>
+
+
+</suite>

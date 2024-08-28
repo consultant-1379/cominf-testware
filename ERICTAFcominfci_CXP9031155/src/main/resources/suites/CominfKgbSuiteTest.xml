@@ -1,0 +1,18 @@
+<!DOCTYPE suite SYSTEM "http://testng.org/testng-1.0.dtd" >
+<suite name="CominfKgb">
+    <test name="CominfKgb">
+        <classes>
+
+	   <class name="com.ericsson.oss.cominf.test.cases.ericOCSnew">
+	        <methods>
+                        <exclude name="OSS40739Func05" />
+                        <exclude name="OSS40739Func10" />  
+                        <exclude name="OSS40739Func16" />
+                        <exclude name="OSS40739Func21" /> 
+                        <exclude name="OSS40739Func15" /> 
+                </methods>
+	    </class>
+		
+        </classes>
+  </test>
+</suite>

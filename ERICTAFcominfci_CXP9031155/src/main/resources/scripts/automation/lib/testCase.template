@@ -1,0 +1,35 @@
+
+     @TestId(id = "##COMINF_TC_ID##", title = "##COMINF_TC_TITLE##")
+     @Context(context = {Context.CLI})
+     @Test(groups={ "##COMINF_ACCEPTANCE##" })
+     @DataDriven(name = "##COMINF_CSV_NAME##")
+
+     public void ##COMINF_FUNCTION_NAME##(
+            @Input("executeFile")String executeFileCmd,
+            @Input("file")String file,
+            @Input("changeDir") String changeDirCmd,
+            @Input("fileLocation") String fileLocation,
+            @Input("lib")String lib,    
+            @Input("timeout") int timeout,
+            @Input("exitShell") String exitShellCmd,
+            @Output("expectedExit") int expectedExitCode) throws TimeoutException, FileNotFoundException, InterruptedException{
+             GenericOperator cliOperator = operatorRegistry.provide(GenericOperator.class);
+             cliOperator.initializeShell(##COMINF_SRV_NAME##,user);
+             cliOperator.sendFileRemotely(##COMINF_SRV_NAME##, file, fileLocation);
+             cliOperator.sendFileRemotely(##COMINF_SRV_NAME##, lib, fileLocation);
+             cliOperator.writeln(changeDirCmd, fileLocation);
+             cliOperator.writeln("convertLineEndings", lib);
+             cliOperator.writeln("convertLineEndings", file);
+             cliOperator.writeln(executeFileCmd, file);
+             Thread.sleep(100000);
+             cliOperator.writeln(exitShellCmd);
+             cliOperator.expectClose(timeout);
+
+         boolean isClose = cliOperator.isClosed();
+         int exitValue = cliOperator.getExitValue();
+         cliOperator.deleteRemoteFile(##COMINF_SRV_NAME##, file, fileLocation);
+         cliOperator.disconnect();
+         assertTrue(isClose);
+         assertEquals(expectedExitCode,exitValue);
+}
+

@@ -1,0 +1,108 @@
+#!/bin/bash
+#------------------------------------------------------------------------
+#
+#       COPYRIGHT (C) ERICSSON RADIO SYSTEMS AB, Sweden
+#
+#       The copyright to the document(s) herein is the property of
+#       Ericsson Radio Systems AB, Sweden.
+#
+#       The document(s) may be used and/or copied only with the written
+#       permission from Ericsson Radio Systems AB or in accordance with
+#       the terms and conditions stipulated in the agreement/contract
+#       under which the document(s) have been supplied.
+#
+#------------------------------------------------------------------------
+
+
+##TC VARIABLE##
+
+G_COMLIB=commonFunctions.lib
+#source the commonFunctions.
+source $G_COMLIB
+G_PASS_FLAG=0
+SCRIPTNAME="`basename $0`"
+
+LOG_DIR=/var/tmp/CILogs/
+if [ ! -d $LOG_DIR ]; then
+        mkdir $LOG_DIR
+fi
+LOG=${LOG_DIR}/${SCRIPTNAME}_${DATE}.log
+
+###################################
+# This function is to create inputs
+# for expect function. Add the expect string
+# and send string  in sequence.
+prepareExpects ()
+{
+         EXPCMD=/ericsson/sdee/bin/add_user.sh
+       EXITCODE=5
+       INPUTEXP=/tmp/${SCRIPTNAME}.in
+       OUTPUTEXP=/tmp/${SCRIPTNAME}.exp
+       echo 'LDAP Directory Manager password
+ldappass
+New local user name
+user12
+Start of uidNumber search range
+1020
+End of uidNumber search range
+1050
+New local user uidNumber
+1041
+New local user password
+shroot@1
+Re-enter password
+shroot@1
+New local user category
+ass_ope
+New local user description
+OSS-RC user
+Continue to create local user
+y' > $INPUTEXP
+}
+prepareExpects2 ()
+{
+   EXPCMD="/ericsson/sdee/bin/del_user.sh -n user12"
+       EXITCODE=5
+       INPUTEXP=/tmp/${SCRIPTNAME}.in
+       OUTPUTEXP=/tmp/${SCRIPTNAME}.exp
+echo 'LDAP Directory Manager password
+ldappass
+Continue to delete local user*
+y' > $INPUTEXP
+
+}
+###############################
+#Execute the action to be performed
+#####################################
+executeAction ()
+{
+l_action=$1
+log "Performing Add user"
+if [ $l_action == "1" ]; then
+prepareExpects
+createExpect  $INPUTEXP $OUTPUTEXP "$EXPCMD"
+executeExpect $OUTPUTEXP
+evaluate $? "failed to add User" "$EXITCODE"
+fi
+
+log "performing Delete user"
+if [ $l_action == "2" ]; then
+prepareExpects2
+createExpect  $INPUTEXP $OUTPUTEXP "$EXPCMD"
+executeExpect $OUTPUTEXP
+evaluate $? "failed to delete user" "$EXITCODE"
+fi
+}
+#########
+##MAIN ##
+#########
+
+log "Start of TC"
+#if preconditions execute pre conditions
+
+#main Logic should be in executeActions subroutine with numbers in order.
+#executeAction 1
+#executeAction 2
+
+#Final assertion of TC, this should be the final step of tc
+#evaluateTC

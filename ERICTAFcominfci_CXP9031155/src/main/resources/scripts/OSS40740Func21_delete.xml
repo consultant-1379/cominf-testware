@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE Model SYSTEM "/opt/ericsson/arne/etc/arne6_3.dtd">
+<Model version="1" importVersion="6.3">
+	<Delete>
+		<Object fdn="SubNetwork=ONRM_ROOT_MO,ManagedElement=GRAN_MLPPP_Router_TC08"/>
+	</Delete>
+</Model>
+
+

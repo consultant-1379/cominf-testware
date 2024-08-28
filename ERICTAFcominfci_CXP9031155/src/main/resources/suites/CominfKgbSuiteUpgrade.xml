@@ -1,0 +1,21 @@
+<!DOCTYPE suite SYSTEM "http://testng.org/testng-1.0.dtd" >
+<suite name="CominfKgbUpgrade">
+    <test name="CominfKgbUpgrade">
+        <classes>
+            <class name="com.ericsson.oss.cominf.test.cases.CdbTestcases">
+	        <methods>
+	                <exclude name="OSS40744Func02" />
+	                <exclude name="checkLdapDetails" />
+	       </methods>
+	    </class>
+            <class name="com.ericsson.oss.cominf.test.cases.ericOCS"/>
+	    <class name="com.ericsson.oss.cominf.test.cases.cominfOthers"/>
+            <class name="com.ericsson.oss.cominf.test.cases.ericSdee">
+		<methods>
+			<exclude name="OSS40738Func02" />
+			<exclude name="OSS40738Func27" />
+		</methods> 
+	    </class>
+        </classes>
+  </test>
+</suite>

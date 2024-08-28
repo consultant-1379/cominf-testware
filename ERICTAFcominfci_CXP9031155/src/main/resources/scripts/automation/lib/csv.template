@@ -1,0 +1,2 @@
+executeFile,file,lib,expectedExit,changeDir,fileLocation,timeout,exitShell,
+file.execute,##TC_SHELL##,commonFunctions.lib,0,change.dir,/tmp,##TC_EXECUTION##,exit,

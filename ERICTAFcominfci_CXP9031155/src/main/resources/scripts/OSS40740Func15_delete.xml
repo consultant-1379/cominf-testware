@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE Model SYSTEM "/opt/ericsson/arne/etc/arne6_3.dtd">
+<Model version="1" importVersion="6.3">
+        <Delete>
+                <Object fdn="SubNetwork=ONRM_ROOT_MO,SubNetwork=GRAN,ManagedElement=HS77214_GRAN_STN"/>
+                <Object fdn="SubNetwork=ONRM_ROOT_MO,Site=HS77214_SITE"/>
+        </Delete>
+</Model>
+

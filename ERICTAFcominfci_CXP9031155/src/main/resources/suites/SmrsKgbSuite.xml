@@ -1,0 +1,38 @@
+<!DOCTYPE suite SYSTEM "http://testng.org/testng-1.0.dtd" >
+<suite name="SmrsKgb">
+    <test name="SmrsKgb">
+        <classes>
+	<class name="com.ericsson.oss.cominf.test.cases.CdbTestcases"/>
+        	<class name="com.ericsson.oss.cominf.test.cases.smrsDismantle"/>
+            <class name="com.ericsson.oss.cominf.test.cases.smrsConfig">
+		<methods>
+			<exclude name="OSS40740Func06" />
+			<exclude name="OSS40740Func15" />
+			<exclude name="OSS40740Func16" />
+			<exclude name="OSS40740Func17" />					
+			<exclude name="OSS40740Func18" />
+			<exclude name="OSS40740Func19" />
+			<exclude name="OSS40740Func20" />
+			<exclude name="OSS40740Func21" />
+			<exclude name="OSS40740Func22" />
+			<exclude name="OSS40740Func27" />
+			<exclude name="OSS40740Func37" />
+			<exclude name="OSS40740Func25" />
+			<exclude name="OSS40740Func31" />
+			<exclude name="OSS40740Func34" />
+			<exclude name="OSS40740Func47" />
+			<exclude name="OSS40740Func48" />
+		</methods>
+	    </class>
+
+            <class name="com.ericsson.oss.cominf.test.cases.smrsAif">
+		<methods>
+			<exclude name="OSS40741Func04" />
+		</methods>
+	    </class>
+
+        </classes>
+  </test>
+
+
+</suite>

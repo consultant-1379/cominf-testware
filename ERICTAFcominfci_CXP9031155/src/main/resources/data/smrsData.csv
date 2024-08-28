@@ -1,0 +1,2 @@
+executeFile,file,expectedExit,changeDir,fileLocation,timeout,exitShell,
+file.execute,smrsString.sh,0,change.dir,/tmp,3000,exit,

@@ -1,0 +1,2 @@
+executeFile,file,lib,nodecreate,nodemodify,nodedelete, expectedExit,changeDir,fileLocation,timeout,exitShell,
+file.execute,OSS40740Func21.sh,commonFunctions.lib,OSS40740Func21_create.xml,OSS40740Func21_modify.xml,OSS40740Func21_delete.xml,0,change.dir,/tmp,3000,exit,

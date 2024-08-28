@@ -1,0 +1,2 @@
+executeFile,file,prompt1,prompt1response,expectedExit,changeDir,fileLocation,timeout,exitShell,
+file.execute,addLdap.sh,LDAP Directory Manager password:,ldappass,0,change.dir,/tmp,800,exit,

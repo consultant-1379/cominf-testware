@@ -1,0 +1,9 @@
+<!DOCTYPE suite SYSTEM "http://testng.org/testng-1.0.dtd" >
+<suite name="UnitTestCases">
+    <test name="UnitTestCases">
+        <classes>
+            <class name="com.ericsson.oss.cominf.test.cases.UnitCase"/>
+        </classes>
+  </test>
+
+</suite>

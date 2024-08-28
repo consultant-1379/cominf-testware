@@ -1,0 +1,1908 @@
+#!/bin/bash
+#------------------------------------------------------------------------
+#
+#       COPYRIGHT (C) ERICSSON RADIO SYSTEMS AB, Sweden
+#
+#       The copyright to the document(s) herein is the property of
+#       Ericsson Radio Systems AB, Sweden.
+#
+#       The document(s) may be used and/or copied only with the written
+#       permission from Ericsson Radio Systems AB or in accordance with
+#       the terms and conditions stipulated in the agreement/contract
+#       under which the document(s) have been supplied.
+#
+#------------------------------------------------------------------------
+
+#GLOBAL VARIABLE
+
+DATE=`date +%Y-%m-%d_%H:%M:%S`
+G_COMLIB=commonFunctions.lib
+
+G_JAVA_VERSION=1
+
+#Sol11
+DHCP_SVC=""
+OS_VERSION=""
+if [ `uname -r` = "5.10" ] ; then
+    OS_VERSION="SOL10"
+else
+    OS_VERSION="SOL11"
+fi
+#Sol11
+
+# Global Variables END
+
+pkginfo ERICodj 2> /dev/null
+ret=$?
+if [[ $ret == 0 ]]; then
+      	PATH_DIR=/ericsson/opendj
+else
+       	PATH_DIR=/ericsson/sdee
+fi
+
+
+
+log () {
+        log_string=$1
+        DATE=`date +%Y-%m-%d_%H:%M:%S`
+        echo "${DATE} ${log_string}" >>${LOG}
+}
+
+G_ERIC_LOG=/var/opt/ericsson/log
+
+
+function getSMRSLogs ()
+{
+ERIC_LOG=""
+logName=$1
+l_cmd=`ls -ltr $G_ERIC_LOG | grep $1|tail -1| awk '{ print $9}'`
+ERIC_LOG="$G_ERIC_LOG/$l_cmd"
+
+}
+
+#G_SDEE_LOG=${PATH_DIR}/log/
+
+pkginfo ERICodj 2> /dev/null
+ret=$?
+if [[ $ret == 0 ]]; then
+        G_OPENDJ_LOG=/ericsson/opendj/log/
+else
+        G_SDEE_LOG=/ericsson/sdee/log/
+fi
+
+
+
+
+function getSDEELogs ()
+{
+SDEE_LOG=""
+logName=$1
+l_cmd=`ls -ltr $G_SDEE_LOG | grep $1|tail -1| awk '{ print $9}'`
+SDEE_LOG="$G_SDEE_LOG/$l_cmd"
+LOG_PATH=$SDEE_LOG
+} 
+
+function getOPENDJLogs ()
+{
+OPENDJ_LOG=""
+logName=$1
+l_cmd=`ls -ltr $G_OPENDJ_LOG | grep $1|tail -1| awk '{ print $9}'`
+OPENDJ_LOG="$G_OPENDJ_LOG/$l_cmd"
+LOG_PATH=$OPENDJ_LOG
+}
+
+
+createExpect () {
+opt_re=
+timeoutcode=
+eofcode=
+opt_trap=0
+chall_timeout=40
+main_timeout=1900
+datafile=$1
+outputfile=$2
+command=$3
+
+
+timeoutcode=1
+eofcode=$timeoutcode
+
+# If on Solaris use the xpg4 version of awk
+if [[ "$(uname)" = "SunOS" ]]; then
+        AWK=/usr/xpg4/bin/awk
+fi
+# On Linux, awk will be in the path
+if [[ "$(uname)" = "Linux" ]]; then
+        AWK=awk
+fi
+
+# Escape any dollar signs in $command
+command=$(echo "$command" | sed 's/\$/\\\\\$/')
+
+# Generate the expect script from the challenge/response pairs
+${AWK} -v cmd="${command}" -v opt="${opt_re}" -v timeoutcode=$timeoutcode -v eofcode=$eofcode -v opt_trap=$opt_trap -v chall_timeout=$chall_timeout -v main_timeout=$main_timeout '
+NR == 1 {
+        print "set timeout " chall_timeout
+        print ""
+        if (opt_trap == 0) {print "trap {"
+                print " if [catch {wait -i -1} output] return"
+                print " if {[lindex $output [expr [llength $output] -1]] != 0 } {"
+                print "         exit [lindex $output [expr [llength $output] -1]]"
+                print " }"
+                print "} SIGCHLD"
+        }
+        print ""
+        print "spawn -noecho", cmd
+        print ""}
+
+{
+        # Escape any double-quotes in the input line
+        gsub("\"", "\\\"")
+
+        # Odd-numbered lines are the challenge lines, so wait for them.
+        # Even-numbered lines are responses, so send them to the spawned process, with a trailing line-feed.
+        if (NR % 2 == 1) {
+                # Challenge line
+                print "expect {"
+                print " " opt "\"" $0 "\" {"
+                if (timeoutcode == eofcode) {
+                        print " } default {"
+                        print "         exit " eofcode
+                        print " }"
+                } else {
+                        print " } timeout {"
+                        print "         exit " timeoutcode
+                        print " } eof {"
+                        print "         exit " eofcode
+                        print " }"
+                }
+                print "}"
+                print "sleep 0.15"
+                timeoutcode++
+                eofcode++
+        } else {
+                # Response line
+                print "send -- \"" $0 "\\r\""
+        }
+}
+END {
+    if (opt_trap == 1) {print "trap {"
+                print " if [catch {wait -i -1} output] return"
+                print " if {[lindex $output [expr [llength $output] -1]] != 0 } {"
+                print "         exit [lindex $output [expr [llength $output] -1]]"
+                print " }"
+                print "} SIGCHLD"
+        }
+        print ""
+        print "set timeout " main_timeout
+        print "expect {"
+        print "    EOF {}"
+        print "    timeout { exit 99 }"
+        print "}"
+        print "sleep 2"
+
+}' $datafile>$outputfile
+}
+executeExpect ()
+        {
+        if [ -f /usr/local/bin/expect ]; then
+                /usr/local/bin/expect $1
+        else
+                log "Expect Not Found"
+                return 99
+        fi
+        }
+
+
+evaluate  () {
+        if [ "$1" != 99 ]; then
+            if [ "$1" != 0 ]; then
+                G_PASS_FLAG=1
+                log "$2"
+                return "$3"
+           else
+                log "success"
+                 return 0
+           fi
+        else
+        G_PASS_FLAG=1
+        log  " EXPECT NOT Found"
+        return 99
+        fi
+}
+
+evaluateTC () {
+if [ $G_PASS_FLAG != 0 ]; then
+log "TC failed.."
+exit 13
+else
+log "TC Passed"
+exit 0
+fi
+
+
+}
+#################################################################
+# SMRS COMMON FUNCTONS
+################################################################
+
+### Function: CHECK_MOUNT_EXISTS ###
+#
+# check that A given mount exists
+#
+# Arguments:
+#    $1 Filesystem
+#
+# Return Values:
+# 0 if the filesystem is mounted, non-zero if its not
+function CHECK_MOUNT_EXISTS(){
+        mount | grep -i "$1"
+        return $?
+
+}
+### Function: CHECK_SMO_FTP_SERVICE_MASTER ###
+#
+# Check SmoFtp Service exists, NB creates temporary files xml_tmp and cs_test_tmp that will need to be deleted
+#
+# Arguments:
+#   $1 oss alias
+#   $2 LRAN required (y/n)
+#   $3 WRAN required (y/n)
+#   $4 GRAN required (y/n)
+#   $5 CORE required (y/n)
+#   $6 XML only (optional defaults to n, if set to y then expect no entries in
+#      ONRM, just XML files)
+#
+# Return Values:
+# 0 if  ok
+# 1 if invalid parameters
+# 80- invalid result from cstest
+
+
+function CHECK_SMO_FTP_SERVICE_MASTER() 
+{
+        [ $# -lt 5 -o $# -gt 6 ] && 
+		{
+		G_PASS_FLAG=1
+		log "Invalid parameters to $FUNCNAME: $1 $2 $3 $4 $5 $6"
+		return 1 
+		}
+
+        rm -f cs_test_tmp xml_tmp
+
+        xml_only=0
+        [ "$6" == n ] && xml_only=1
+
+        /opt/ericsson/nms_cif_cs/etc/unsupported/bin/cstest -s ONRM_CS -ns masterservice lt FtpService > cs_test_tmp ||  
+		{
+        G_PASS_FLAG=1
+        log "cstest FtpService failed $?" 
+		return 80 
+		}
+        if [ "$2" == y -a $xml_only -eq 0 ]; then
+                l_cmd=`grep "SubNetwork=ONRM_ROOT_MO,FtpServer=SMRSMASTERLRAN-$1,FtpService=l-smobackup-$1" cs_test_tmp` || 
+				{
+				G_PASS_FLAG=1
+				log "FTP Service l-smobackup-$1 not found"
+				return 81 
+				}
+                l_cmd=`grep "SubNetwork=ONRM_ROOT_MO,FtpServer=SMRSMASTERLRAN-$1,FtpService=l-smoconfig-$1" cs_test_tmp` || 
+				{
+				G_PASS_FLAG=1
+				log "FTP Service l-smoconfig-$1 not found"
+				return 82
+				}
+                l_cmd=`grep "SubNetwork=ONRM_ROOT_MO,FtpServer=SMRSMASTERLRAN-$1,FtpService=l-smokeystore-$1" cs_test_tmp` || 
+				{
+				G_PASS_FLAG=1
+				log "FTP Service l-smokeystore-$1 not found" 
+				return 83
+				}
+                l_cmd=`grep "SubNetwork=ONRM_ROOT_MO,FtpServer=SMRSMASTERLRAN-$1,FtpService=l-smoswstore-$1" cs_test_tmp` ||
+				{
+				G_PASS_FLAG=1
+				log "FTP Service l-smoswstore-$1 not found"
+				return 84 
+				}
+        fi
+        if [ "$3" == y -a $xml_only -eq 0 ]; then
+                l_cmd=`grep "SubNetwork=ONRM_ROOT_MO,FtpServer=SMRSMASTERWRAN-$1,FtpService=smo-backup-$1" cs_test_tmp` || 
+				{
+				G_PASS_FLAG=1
+				log "FTP Service smo-backup-$1 not found"
+				return 85 
+				}
+                l_cmd=`grep "SubNetwork=ONRM_ROOT_MO,FtpServer=SMRSMASTERWRAN-$1,FtpService=smo-config-$1" cs_test_tmp` || 
+				{
+				G_PASS_FLAG=1
+				log "FTP Service smo-config-$1 not found"
+				return 86 
+				}
+                l_cmd=`grep "SubNetwork=ONRM_ROOT_MO,FtpServer=SMRSMASTERWRAN-$1,FtpService=smo-keystore-$1" cs_test_tmp` || 
+				{
+				G_PASS_FLAG=1
+				log "FTP Service smo-keystore-$1 not found"
+				return 87 
+				}
+                l_cmd=`grep "SubNetwork=ONRM_ROOT_MO,FtpServer=SMRSMASTERWRAN-$1,FtpService=smo-swstore-$1" cs_test_tmp` || 
+				{
+				G_PASS_FLAG=1
+				log "FTP Service smo-swstore-$1 not found"
+				return 88 
+				}
+        fi
+#    l_cmd=`grep "SLAVE" cs_test_tmp` && 
+#	{
+#	log "FTP SLAVE Services found"
+#	return 89 
+#	}
+
+        # Now check xml files
+        ls /var/opt/ericsson/arne/FTPServices > xml_tmp || 
+		{
+		G_PASS_FLAG=1
+		log "ls of FTPServices failed"
+		return 90 
+		}
+        # Check GRAN files created or not as expected
+        CHECK_SMOXML_FILE oss1 GRAN $4 xml_tmp || return $?
+        # Check WRAN files created or not as expected
+        CHECK_SMOXML_FILE oss1 WRAN $3 xml_tmp || return $?
+        # Check LRAN files created or not as expected
+        CHECK_SMOXML_FILE oss1 LRAN $2 xml_tmp || return $?
+        # Check CORE files created or not as expected
+        CHECK_SMOXML_FILE oss1 CORE $5 xml_tmp || return $?
+}
+
+function CHECK_SMO_FTP_SERVICE_MASTER1() 
+{
+        [ $# -lt 5 -o $# -gt 6 ] && 
+		{
+		G_PASS_FLAG=1
+		log "Invalid parameters to $FUNCNAME: $1 $2 $3 $4 $5 $6"
+		return 1 
+		}
+
+        rm -f cs_test_tmp xml_tmp
+
+        xml_only=0
+        [ "$6" == n ] && xml_only=1
+
+        /opt/ericsson/nms_cif_cs/etc/unsupported/bin/cstest -s ONRM_CS -ns masterservice lt FtpService > cs_test_tmp ||  
+		{
+        G_PASS_FLAG=1
+        log "cstest FtpService failed $?" 
+		return 80 
+		}
+        if [ "$2" == y -a $xml_only -eq 0 ]; then
+                l_cmd=`grep "SubNetwork=ONRM_ROOT_MO,FtpServer=SMRSMASTERLRAN-$1,FtpService=l-smobackup-$1" cs_test_tmp` && 
+				{
+				G_PASS_FLAG=1
+				log "FTP Service l-smobackup-$1 not found"
+				return 81 
+				}
+                l_cmd=`grep "SubNetwork=ONRM_ROOT_MO,FtpServer=SMRSMASTERLRAN-$1,FtpService=l-smoconfig-$1" cs_test_tmp` && 
+				{
+				G_PASS_FLAG=1
+				log "FTP Service l-smoconfig-$1 not found"
+				return 82
+				}
+                l_cmd=`grep "SubNetwork=ONRM_ROOT_MO,FtpServer=SMRSMASTERLRAN-$1,FtpService=l-smokeystore-$1" cs_test_tmp` && 
+				{
+				G_PASS_FLAG=1
+				log "FTP Service l-smokeystore-$1 not found" 
+				return 83
+				}
+                l_cmd=`grep "SubNetwork=ONRM_ROOT_MO,FtpServer=SMRSMASTERLRAN-$1,FtpService=l-smoswstore-$1" cs_test_tmp` &&
+				{
+				G_PASS_FLAG=1
+				log "FTP Service l-smoswstore-$1 not found"
+				return 84 
+				}
+        fi
+        if [ "$3" == y -a $xml_only -eq 0 ]; then
+                l_cmd=`grep "SubNetwork=ONRM_ROOT_MO,FtpServer=SMRSMASTERWRAN-$1,FtpService=smo-backup-$1" cs_test_tmp` && 
+				{
+				G_PASS_FLAG=1
+				log "FTP Service smo-backup-$1 not found"
+				return 85 
+				}
+                l_cmd=`grep "SubNetwork=ONRM_ROOT_MO,FtpServer=SMRSMASTERWRAN-$1,FtpService=smo-config-$1" cs_test_tmp` && 
+				{
+				G_PASS_FLAG=1
+				log "FTP Service smo-config-$1 not found"
+				return 86 
+				}
+                l_cmd=`grep "SubNetwork=ONRM_ROOT_MO,FtpServer=SMRSMASTERWRAN-$1,FtpService=smo-keystore-$1" cs_test_tmp` && 
+				{
+				G_PASS_FLAG=1
+				log "FTP Service smo-keystore-$1 not found"
+				return 87 
+				}
+                l_cmd=`grep "SubNetwork=ONRM_ROOT_MO,FtpServer=SMRSMASTERWRAN-$1,FtpService=smo-swstore-$1" cs_test_tmp` && 
+				{
+				G_PASS_FLAG=1
+				log "FTP Service smo-swstore-$1 not found"
+				return 88 
+				}
+        fi
+
+}
+### Function: CHECK_SMOXML_FILE ###
+#
+#  Check SMO XML files are created as expected
+# Arguments:
+#   $1 oss alias
+#   $2 network type e.g. WRAN, LRAN, CORE, GRAN
+#   $3 expected (y if expected, n if should be absent)
+#   $4 xml listing to check
+#
+# Return Values:
+# 0 if  ok
+# 1 if invalid parameters
+# 91 invalid XML for oss alias
+function CHECK_SMOXML_FILE() {
+        # Check network files created or not as expected
+        if [ "$3" == y ]; then
+                grep "^SMO_FTPService$2_$1.xml" xml_tmp || 
+				{
+				log "$2 FTP Service XML not found"
+				return 91 
+				}
+        fi
+        return 0
+
+}
+
+### Function POSIX_CHECK_USER
+#
+# Checks if user with given attributes exists
+#
+# Arguments:
+# $1    User name
+# $2    uid
+# $3    gid
+# $4    desc
+# $5    homedir
+# $6    shell
+# $7    remote box       (optional)
+# Return Values:
+# 0      User exists
+# 1      user does not exist
+#
+function POSIX_CHECK_USER()
+{
+        if [ $# -lt  6 -o $# -gt  7 ]; then
+                invalid_params $FUNCNAME user uid gid desc homedir shell '[remote]'
+                return 1
+        fi
+
+        cmd='grep "^'"${1}:x:${2}:${3}:${4}:${5}:${6}"'" /etc/passwd'
+        if [ $# -eq 7 ]; then
+                ssh $7 $cmd
+        else
+                eval $cmd
+        fi
+        # Normalise return code to 0=user present, 1=any other error
+        [ $? -eq 0 ]
+        return $?
+}
+function CHECK_LRAN_USERS() {
+        [ $# -ne 2 ] && { echo "Invalid parameters to $FUNCNAME: $1 $2"; return 1; }
+        #Check users on smrs_master
+        POSIX_CHECK_USER l-smoconfig-$2 "2.*" 205 "A ftp account" "/LRAN/CommonPersistent" "/bin/bash" $1 || {
+                echo "Failed to check l-smoconfig: $?"; return 2
+        }
+        POSIX_CHECK_USER l-smoswstore-$2 "2.*" 205 "A ftp account" "/LRAN/CommonPersistent" "/bin/bash" $1 || {
+                echo "Failed to check l-smoswstore: $?"; return 3
+        }
+        POSIX_CHECK_USER l-smokeystore-$2 "2.*" 205 "A ftp account" "/LRAN/CommonPersistent" "/bin/bash" $1 || {
+                echo "Failed to check l-smokeystore: $?"; return 4
+        }
+        POSIX_CHECK_USER l-smobackup-$2 "2.*" 205 "A ftp account" "/LRAN/CommonPersistent" "/bin/bash" $1 || {
+                echo "Failed to check l-smobackup: $?"; return 5
+        }
+        #Check users on OSS master
+        POSIX_CHECK_USER l-smoconfig-$2 "2.*" 205 "A ftp account" "/var/opt/ericsson/smrsstore//LRAN/CommonPersistent" "/bin/bash" || {
+                echo "Failed to check l-smoconfig: $?"; return 6
+        }
+        POSIX_CHECK_USER l-smoswstore-$2 "2.*" 205 "A ftp account" "/var/opt/ericsson/smrsstore//LRAN/CommonPersistent" "/bin/bash" || {
+                echo "Failed to check l-smoswstore: $?"; return 7
+        }
+        POSIX_CHECK_USER l-smokeystore-$2 "2.*" 205 "A ftp account" "/var/opt/ericsson/smrsstore//LRAN/CommonPersistent" "/bin/bash" || {
+                echo "Failed to check l-smokeystore: $?"; return 8
+        }
+        POSIX_CHECK_USER l-smobackup-$2 "2.*" 205 "A ftp account" "/var/opt/ericsson/smrsstore//LRAN/CommonPersistent" "/bin/bash" || {
+                echo "Failed to check l-smobackup: $?"; return 9
+        }
+        return 0
+}
+
+### Function: CHECK_WRAN_USERS ###
+#
+# Check WRAN users exists with expected properties
+#
+# Arguments:
+#   $1 Remote box
+#   $2 oss alias
+#
+# Return Values:
+# 0 if  ok
+# 1 if invalid parameters
+
+
+function CHECK_WRAN_USERS() {
+        [ $# -ne 2 ] && { echo "Invalid parameters to $FUNCNAME: $1 $2"; return 1; }
+        #Check users on smrs_master
+        POSIX_CHECK_USER smo-config-$2 "2.*" 205 "A ftp account" "/WRAN/CommonPersistent" "/bin/bash" $1 || {
+           echo "Failed to check smo-config: $?"; return 2
+        }
+        POSIX_CHECK_USER smo-swstore-$2 "2.*" 205 "A ftp account" "/WRAN/CommonPersistent" "/bin/bash" $1 || {
+           echo "Failed to check smo-swstore: $?"; return 3
+        }
+        POSIX_CHECK_USER smo-keystore-$2 "2.*" 205 "A ftp account" "/WRAN/CommonPersistent" "/bin/bash" $1 || {
+           echo "Failed to check smo-keystore: $?"; return 4
+        }
+        POSIX_CHECK_USER smo-backup-$2 "2.*" 205 "A ftp account" "/WRAN/CommonPersistent" "/bin/bash" $1 || {
+           echo "Failed to check smo-backup: $?"; return 5
+    }
+        #Check users on OSS master
+        POSIX_CHECK_USER smo-config-$2 "2.*" 205 "A ftp account" "/var/opt/ericsson/smrsstore//WRAN/CommonPersistent" "/bin/bash" || {
+                echo "Failed to check smo-config: $?"; return 6
+        }
+        POSIX_CHECK_USER smo-swstore-$2 "2.*" 205 "A ftp account" "/var/opt/ericsson/smrsstore//WRAN/CommonPersistent" "/bin/bash" || {
+                echo "Failed to check smo-swstore: $?"; return 7
+        }
+        POSIX_CHECK_USER smo-keystore-$2 "2.*" 205 "A ftp account" "/var/opt/ericsson/smrsstore//WRAN/CommonPersistent" "/bin/bash" || {
+                echo "Failed to check smo-keystore: $?"; return 8
+        }
+        POSIX_CHECK_USER smo-backup-$2 "2.*" 205 "A ftp account" "/var/opt/ericsson/smrsstore//WRAN/CommonPersistent" "/bin/bash" || {
+                echo "Failed to check smo-backup: $?"; return 9
+        }
+        return 0
+}
+### Function: CHECK_SLAVE_EXISTS  ###
+#
+# Check Slave exists in smrs_config
+#
+# Arguments:
+#   $1 Name of slave
+#
+# Return Values:
+# 0 if found slave, non-zero if not
+
+function CHECK_SLAVE_EXISTS(){
+        [ $# -ne 1 ] && { echo "Invalid parameters to $FUNCNAME $#"; return 1; }
+        grep ${1} /etc/opt/ericsson/nms_bismrs_mc/smrs_config
+        return $?
+}
+### Function: CHECK_AIF_FTP_SERVICE ###
+#
+#       Check whether FtpService exists for AIF user
+# Arguments:
+#   $1 AIF username
+#   $2 Network type
+#   $3 Slave name
+#
+# Return Values:
+# 0 if  exists
+# 1 if invalid parameters
+# 2 if doesn't exist
+# 80- invalid result from cstest
+function CHECK_AIF_FTP_SERVICE() {
+        [ $# -ne 3 ] && { echo "Invalid parameters to $FUNCNAME"; return 1; }
+
+        rm -f cs_test_tmp
+
+        /opt/ericsson/nms_cif_cs/etc/unsupported/bin/cstest -s ONRM_CS -ns masterservice lt FtpService > cs_test_tmp ||  { echo "cstest FtpService failed $?"; return 80; }
+        grep "SubNetwork=ONRM_ROOT_MO,FtpServer=SMRSSLAVE-$2-$3,FtpService=$1" cs_test_tmp || { echo "FTP Service $1 not found"; return 2; }
+        return 0
+}
+
+### Function: CHECK_AIF  ###
+#
+# Check AIF user
+#
+# Arguments:
+#   $1 Name of aif user
+#   $2 network type
+#   $3 NEDSS name (optional - not required if slave was on smrs_master)
+#
+# Return Values:
+# 0 if cleanup successful, non-zero if its not
+
+function CHECK_AIF(){
+        [ $# -lt 2 -o $# -gt 3 ] && { echo "Invalid parameters to $FUNCNAME $#"; return 1; }
+
+        retval=0
+        line="$1:x:[0-9]*:200:RBS aif user $1:/$2:/bin/bash"
+        ssh smrs_master "grep \"$line\" /etc/passwd" || { echo "Failed to find $1 on smrs_master"; }
+        if [ $# -eq 3 ]; then
+                ssh smrs_master ssh $3 grep \\\"$line\\\" /etc/passwd || { echo "Failed to find $1 on NEDSS"; }
+        fi
+}
+
+function CHECK_DIRECTORY(){
+
+        retval=0
+                awkCmd="awk '{print \$4,\$5,\$6}'"
+        cmd="pkgproto $1 | $awkCmd |head -1 "
+        result=$(ssh $5 $cmd)
+        [ $? -ne 0 ] &&
+                {
+                        G_PASS_FLAG=1;
+                        log "Failed to stat $1 on $5";
+                        return 2;
+                }
+        [ "$result" != "$4 $2 $3" ] && {
+                        G_PASS_FLAG=1;
+                        log "Wrong owner/permissions got $result";
+                        return 3;
+                }
+        return 0
+}
+
+function CHECK_WRAN_FILESYSTEM(){
+
+        CHECK_DIRECTORY /export/WRAN/AIF/ root nms 0775 $1 ||
+                {
+                G_PASS_FLAG=1;
+                log "Invalid WRAN/AIF";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/ root nms 0775 $1 ||
+                {
+                G_PASS_FLAG=1;
+                log "Invalid WRAN/CommonPersistent";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/configuration/ root nms 0775 $1 ||
+                {
+                G_PASS_FLAG=1;
+                log "Invalid WRAN configuration";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/Software/ root nms 0775 $1 ||
+                {
+                G_PASS_FLAG=1;
+            log "Invalid WRAN software";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/Software/RNC/ root nms 0775 $1 ||
+                {
+                G_PASS_FLAG=1;
+                log "Invalid WRAN Software RNC";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/Software/RNC/Up/ root nms 0775 $1 ||
+                {
+                G_PASS_FLAG=1;
+                log "Invalid WRAN Software RNC Up";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/Software/RANAG/ root nms 0775 $1 ||
+                {
+                G_PASS_FLAG=1;
+                log "Invalid WRAN Software RANAG";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/Software/RANAG/Up/ root nms 0775 $1 ||
+                {
+                G_PASS_FLAG=1;
+                log "Invalid WRAN Software RANAG Up";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/Software/RBS/ root nms 0775 $1 ||
+                {
+                        G_PASS_FLAG=1;
+                        log "Invalid WRAN Software Software RBS";
+                        }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/Software/RBS/Up/ root nms 0775 $1 ||
+                {
+                G_PASS_FLAG=1;
+                log "Invalid WRAN Software RBS Up";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/LICENSE/ root nms 0775 $1 ||
+                {
+                G_PASS_FLAG=1;
+                log "Invalid WRAN LICENSE";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/BACKUP/ root nms 0775 $1 ||
+                {
+                G_PASS_FLAG=1;
+                log "Invalid WRAN BACKUP";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/LICENSE/RNC/ root nms 0775 $1 ||
+                {
+                G_PASS_FLAG=1;
+                log "Invalid WRAN LICENSE RNC";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/BACKUP/RNC/ root nms 0775 $1 ||
+                {
+                G_PASS_FLAG=1;
+                log "Invalid WRAN BACKUP RNC";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/LICENSE/RBS/ root nms 0775 $1 ||
+                {
+                G_PASS_FLAG=1;
+                log "Invalid WRAN LICENSE RBS";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/BACKUP/RBS/ root nms 0775 $1 ||
+                {
+                G_PASS_FLAG=1;
+                log "Invalid WRAN BACKUP RBS";
+                }
+        CHECK_DIRECTORY /export/WRAN/smrs_master/ root nms 0775 $1 ||
+                {
+                G_PASS_FLAG=1;
+                log "Invalid WRAN smrs_master";
+                }
+        CHECK_DIRECTORY /export/WRAN/smrs_master/AIF/ root nms 0775 $1 ||
+                {
+                G_PASS_FLAG=1;
+                log "Invalid WRAN smrs_master AIF";
+                }
+
+}
+function CHECK_LRAN_FILESYSTEM(){
+
+        CHECK_DIRECTORY /export/LRAN/AIF root nms 0775 $1 ||
+                {
+                G_PASS_FLAG=1;
+                log "Invalid LRAN/AIF";
+                }
+        CHECK_DIRECTORY /export/LRAN/CommonPersistent root nms 0775 $1 ||
+                {
+                                G_PASS_FLAG=1;
+                log "Invalid LRAN/CommonPersistent";
+                }
+        CHECK_DIRECTORY /export/LRAN/CommonPersistent/configuration root nms 0775 $1 ||
+                {
+                                G_PASS_FLAG=1;
+                log "Invalid LRAN configuration";
+                }
+        CHECK_DIRECTORY /export/LRAN/CommonPersistent/autobind root nms 0775 $1 ||
+                {
+                G_PASS_FLAG=1;
+                log "Invalid LRAN autobind";
+                }
+        CHECK_DIRECTORY /export/LRAN/CommonPersistent/Software root nms 0775 $1 ||
+                {
+                                G_PASS_FLAG=1;
+                log "Invalid LRAN Software";
+                }
+        CHECK_DIRECTORY /export/LRAN/CommonPersistent/Software/ERBS root nms 0775 $1 ||
+                {
+                                G_PASS_FLAG=1;
+                log "Invalid LRAN Software ERBS";
+                }
+        CHECK_DIRECTORY /export/LRAN/CommonPersistent/Software/ERBS/Up root nms 0775 $1 ||
+                {
+                                G_PASS_FLAG=1;
+                log "Invalid LRAN Software ERBS Up";
+                }
+        CHECK_DIRECTORY /export/LRAN/CommonPersistent/LICENSE root nms 0775 $1 ||
+                {
+                                G_PASS_FLAG=1;
+                log "Invalid LRAN LICENSE";
+                }
+        CHECK_DIRECTORY /export/LRAN/CommonPersistent/BACKUP root nms 0775 $1 ||
+                {
+                                G_PASS_FLAG=1;
+                log "Invalid LRAN BACKUP";
+                }
+        CHECK_DIRECTORY /export/LRAN/CommonPersistent/LICENSE/ERBS root nms 0775 $1 ||
+                {
+                                G_PASS_FLAG=1;
+                log "Invalid LRAN LICENSE ERBS";
+                }
+        CHECK_DIRECTORY /export/LRAN/CommonPersistent/BACKUP/ERBS root nms 0775 $1 ||
+                {
+                                G_PASS_FLAG=1;
+                log "Invalid LRAN BACKUP ERBS";
+                }
+        CHECK_DIRECTORY /export/LRAN/smrs_master root nms 0775 $1 ||
+                {
+                                G_PASS_FLAG=1;
+                log "Invalid LRAN smrs_master";
+                }
+        CHECK_DIRECTORY /export/LRAN/smrs_master/AIF root nms 0775 $1 ||
+                {
+                                G_PASS_FLAG=1;
+                log "Invalid LRAN smrs_master AIF";
+                }
+        return 0
+}
+
+function CHECK_GRAN_FILESYSTEM()
+{
+
+        #ssh $1 'grep ^/GRAN /etc/auto.smrs | grep /export/GRAN' || { log "No auto.smrs entry for GRAN"; return 20; }
+        #ssh $1 'grep auto.smrs /etc/auto.master' || { log "No auto.smrs entry in auto.master"; return 20; }
+        CHECK_DIRECTORY /export/GRAN/AIF root nms 0775 $1 ||
+                {
+                                G_PASS_FLAG=1;
+                   log "Invalid GRAN/AIF";
+            }
+        CHECK_DIRECTORY /export/GRAN/CommonPersistent root nms 0775 $1 ||
+                {
+                                G_PASS_FLAG=1;
+                log "Invalid GRAN/CommonPersistent";
+                }
+        CHECK_DIRECTORY /export/GRAN/CommonPersistent/autobind root aif 0775 $1 ||
+                {
+                                G_PASS_FLAG=1;
+                log "Invalid GRAN autobind";
+                }
+        CHECK_DIRECTORY /export/GRAN/CommonPersistent/BackupCM root nms 0775 $1 ||
+                {
+                                G_PASS_FLAG=1;
+                log "Invalid GRAN BackupCM";
+                }
+        CHECK_DIRECTORY /export/GRAN/CommonPersistent/LICENSE root nms 0775 $1 ||
+                {
+                G_PASS_FLAG=1;
+                log "Invalid GRAN LICENSE";
+                }
+        CHECK_DIRECTORY /export/GRAN/CommonPersistent/Software root nms 0775 $1 ||
+                {
+                                G_PASS_FLAG=1;
+                log "Invalid GRAN Software";
+                }
+        CHECK_DIRECTORY /export/GRAN/CommonPersistent/Software/STN root nms 0775 $1 ||
+                {
+                G_PASS_FLAG=1;
+                log "Invalid GRAN STN";
+                }
+        CHECK_DIRECTORY /export/GRAN/tftp root nms 0775 $1 ||
+                {
+                                G_PASS_FLAG=1;
+                log "Invalid GRAN tftp";
+                }
+        CHECK_DIRECTORY /export/GRAN/syslog root nms 0775 $1 ||
+                {
+                                G_PASS_FLAG=1;
+                log "Invalid GRAN syslog";
+                }
+        return 0
+}
+
+function CHECK_CORE_FILESYSTEM(){
+       
+        CHECK_DIRECTORY /export/CORE/AIF root nms 0775 $1 ||
+		{ 
+		G_PASS_FLAG=1; 
+		log "Invalid CORE/AIF"; 
+		}
+        CHECK_DIRECTORY /export/CORE/CommonPersistent root nms 0775 $1 || 
+		{ 
+				G_PASS_FLAG=1; 
+		log "Invalid CORE/CommonPersistent"; 
+		}
+        CHECK_DIRECTORY /export/CORE/CommonPersistent/configuration root nms 0775 $1 ||
+		{ 
+				G_PASS_FLAG=1; 
+		log "Invalid CORE configuration"; 
+		}
+        CHECK_DIRECTORY /export/CORE/CommonPersistent/Software root nms 0775 $1 || 
+		{ 
+				G_PASS_FLAG=1; 
+		log "Invalid CORE Software";
+		}
+        CHECK_DIRECTORY /export/CORE/CommonPersistent/LICENSE root nms 0775 $1 ||
+		{ 
+				G_PASS_FLAG=1; 
+		log "Invalid CORE LICENSE";
+		}
+        CHECK_DIRECTORY /export/CORE/CommonPersistent/Backup root nms 0775 $1 ||
+		{ 
+				G_PASS_FLAG=1; 
+		log "Invalid CORE Backup"; 
+		}
+        return 0
+}
+
+function CHECK_NO_GRAN_FILESYSTEM()
+{
+
+        #ssh $1 'grep ^/GRAN /etc/auto.smrs | grep /export/GRAN' && { log "No auto.smrs entry for GRAN"; return 20; }
+        #ssh $1 'grep auto.smrs /etc/auto.master' && { log "No auto.smrs entry in auto.master"; return 20; }
+        CHECK_DIRECTORY /export/GRAN/AIF root nms 0775 $1 &&
+                {
+                                G_PASS_FLAG=1;
+                   log "ERROR After dismantle still :Invalid GRAN/AIF";
+            }
+        CHECK_DIRECTORY /export/GRAN/CommonPersistent root nms 0775 $1 &&
+                {
+                                G_PASS_FLAG=1;
+                log "ERROR After dismantle still :Invalid GRAN/CommonPersistent";
+                }
+        CHECK_DIRECTORY /export/GRAN/CommonPersistent/autobind root aif 0775 $1 &&
+                {
+                                G_PASS_FLAG=1;
+                log "ERROR After dismantle still :Invalid GRAN autobind";
+                }
+        CHECK_DIRECTORY /export/GRAN/CommonPersistent/BackupCM root nms 0775 $1 &&
+                {
+                                G_PASS_FLAG=1;
+                log "ERROR After dismantle still :Invalid GRAN BackupCM";
+                }
+        CHECK_DIRECTORY /export/GRAN/CommonPersistent/LICENSE root nms 0775 $1 &&
+                {
+                G_PASS_FLAG=1;
+                log "ERROR After dismantle still :Invalid GRAN LICENSE";
+                }
+        CHECK_DIRECTORY /export/GRAN/CommonPersistent/Software root nms 0775 $1 &&
+                {
+                                G_PASS_FLAG=1;
+                log "ERROR After dismantle still :Invalid GRAN Software";
+                }
+        CHECK_DIRECTORY /export/GRAN/CommonPersistent/Software/STN root nms 0775 $1 &&
+                {
+                G_PASS_FLAG=1;
+                log "ERROR After dismantle still :Invalid GRAN STN";
+                }
+        CHECK_DIRECTORY /export/GRAN/tftp root nms 0775 $1 &&
+                {
+                                G_PASS_FLAG=1;
+                log "ERROR After dismantle still :Invalid GRAN tftp";
+                }
+        CHECK_DIRECTORY /export/GRAN/syslog root nms 0775 $1 &&
+                {
+                                G_PASS_FLAG=1;
+                log "ERROR After dismantle still :Invalid GRAN syslog";
+                }
+        return 0
+}
+
+function CHECK_NO_LRAN_FILESYSTEM(){
+
+        CHECK_DIRECTORY /export/LRAN/AIF root nms 0775 $1 &&
+                {
+                G_PASS_FLAG=1;
+                log "ERROR After Dismantle : Still Invalid LRAN/AIF";
+                }
+        CHECK_DIRECTORY /export/LRAN/CommonPersistent root nms 0775 $1 &&
+                {
+                                G_PASS_FLAG=1;
+                log "ERROR After Dismantle : Still Invalid LRAN/CommonPersistent";
+                }
+        CHECK_DIRECTORY /export/LRAN/CommonPersistent/configuration root nms 0775 $1 &&
+                {
+                                G_PASS_FLAG=1;
+                log "ERROR After Dismantle : Still Invalid LRAN configuration";
+                }
+        CHECK_DIRECTORY /export/LRAN/CommonPersistent/autobind root nms 0775 $1 &&
+                {
+                G_PASS_FLAG=1;
+                log "ERROR After Dismantle : Still Invalid LRAN autobind";
+                }
+        CHECK_DIRECTORY /export/LRAN/CommonPersistent/Software root nms 0775 $1 &&
+                {
+                                G_PASS_FLAG=1;
+                log "ERROR After Dismantle : Still Invalid LRAN Software";
+                }
+        CHECK_DIRECTORY /export/LRAN/CommonPersistent/Software/ERBS root nms 0775 $1 &&
+                {
+                                G_PASS_FLAG=1;
+                log "ERROR After Dismantle : Still Invalid LRAN Software ERBS";
+                }
+        CHECK_DIRECTORY /export/LRAN/CommonPersistent/Software/ERBS/Up root nms 0775 $1 &&
+                {
+                                G_PASS_FLAG=1;
+                log "ERROR After Dismantle : Still Invalid LRAN Software ERBS Up";
+                }
+        CHECK_DIRECTORY /export/LRAN/CommonPersistent/LICENSE root nms 0775 $1 &&
+                {
+                                G_PASS_FLAG=1;
+                log "ERROR After Dismantle : Still Invalid LRAN LICENSE";
+                }
+        CHECK_DIRECTORY /export/LRAN/CommonPersistent/BACKUP root nms 0775 $1 &&
+                {
+                                G_PASS_FLAG=1;
+                log "ERROR After Dismantle : Still Invalid LRAN BACKUP";
+                }
+        CHECK_DIRECTORY /export/LRAN/CommonPersistent/LICENSE/ERBS root nms 0775 $1 &&
+                {
+                                G_PASS_FLAG=1;
+                log "ERROR After Dismantle : Still Invalid LRAN LICENSE ERBS";
+                }
+        CHECK_DIRECTORY /export/LRAN/CommonPersistent/BACKUP/ERBS root nms 0775 $1 &&
+                {
+                                G_PASS_FLAG=1;
+                log "ERROR After Dismantle : Still Invalid LRAN BACKUP ERBS";
+                }
+        CHECK_DIRECTORY /export/LRAN/smrs_master root nms 0775 $1 &&
+                {
+                                G_PASS_FLAG=1;
+                log "ERROR After Dismantle : Still Invalid LRAN smrs_master";
+                }
+        CHECK_DIRECTORY /export/LRAN/smrs_master/AIF root nms 0775 $1 &&
+                {
+                                G_PASS_FLAG=1;
+                log "ERROR After Dismantle : Still Invalid LRAN smrs_master AIF";
+                }
+        return 0
+}
+
+function CHECK_NO_WRAN_FILESYSTEM(){
+
+        CHECK_DIRECTORY /export/WRAN/AIF/ root nms 0775 $1 &&
+                {
+                G_PASS_FLAG=1;
+                log "ERROR: After Dismantle Still Invalid WRAN/AIF";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/ root nms 0775 $1 &&
+                {
+                G_PASS_FLAG=1;
+                log "ERROR: After Dismantle Still Invalid WRAN/CommonPersistent";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/configuration/ root nms 0775 $1 &&
+                {
+                G_PASS_FLAG=1;
+                log "ERROR: After Dismantle Still Invalid WRAN configuration";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/Software/ root nms 0775 $1 &&
+                {
+                G_PASS_FLAG=1;
+            log "ERROR: After Dismantle Still Invalid WRAN software";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/Software/RNC/ root nms 0775 $1 &&
+                {
+                G_PASS_FLAG=1;
+                log "ERROR: After Dismantle Still Invalid WRAN Software RNC";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/Software/RNC/Up/ root nms 0775 $1 &&
+                {
+                G_PASS_FLAG=1;
+                log "ERROR: After Dismantle Still Invalid WRAN Software RNC Up";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/Software/RANAG/ root nms 0775 $1 &&
+                {
+                G_PASS_FLAG=1;
+                log "ERROR: After Dismantle Still Invalid WRAN Software RANAG";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/Software/RANAG/Up/ root nms 0775 $1 &&
+                {
+                G_PASS_FLAG=1;
+                log "ERROR: After Dismantle Still Invalid WRAN Software RANAG Up";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/Software/RBS/ root nms 0775 $1 &&
+                {
+                        G_PASS_FLAG=1;
+                        log "ERROR: After Dismantle Still Invalid WRAN Software Software RBS";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/Software/RBS/Up/ root nms 0775 $1 &&
+                {
+                G_PASS_FLAG=1;
+                log "ERROR: After Dismantle Still Invalid WRAN Software RBS Up";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/LICENSE/ root nms 0775 $1 &&
+                {
+                G_PASS_FLAG=1;
+                log "ERROR: After Dismantle Still Invalid WRAN LICENSE";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/BACKUP/ root nms 0775 $1 &&
+                {
+                G_PASS_FLAG=1;
+                log "ERROR: After Dismantle Still Invalid WRAN BACKUP";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/LICENSE/RNC/ root nms 0775 $1 &&
+                {
+                G_PASS_FLAG=1;
+                log "ERROR: After Dismantle Still Invalid WRAN LICENSE RNC";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/BACKUP/RNC/ root nms 0775 $1 &&
+                {
+                G_PASS_FLAG=1;
+                log "ERROR: After Dismantle Still Invalid WRAN BACKUP RNC";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/LICENSE/RBS/ root nms 0775 $1 &&
+                {
+                G_PASS_FLAG=1;
+                log "ERROR: After Dismantle Still Invalid WRAN LICENSE RBS";
+                }
+        CHECK_DIRECTORY /export/WRAN/CommonPersistent/BACKUP/RBS/ root nms 0775 $1 &&
+                {
+                G_PASS_FLAG=1;
+                log "ERROR: After Dismantle Still Invalid WRAN BACKUP RBS";
+                }
+        CHECK_DIRECTORY /export/WRAN/smrs_master/ root nms 0775 $1 &&
+                {
+                G_PASS_FLAG=1;
+                log "ERROR: After Dismantle Still Invalid WRAN smrs_master";
+                }
+        CHECK_DIRECTORY /export/WRAN/smrs_master/AIF/ root nms 0775 $1 &&
+                {
+                G_PASS_FLAG=1;
+                log "ERROR: After Dismantle Still Invalid WRAN smrs_master AIF";
+                }
+			return 0
+}
+function CHECK_NO_CORE_FILESYSTEM(){
+       
+        CHECK_DIRECTORY /export/CORE/AIF root nms 0775 $1 &&
+		{ 
+		G_PASS_FLAG=1; 
+		log "Invalid CORE/AIF"; 
+		}
+        CHECK_DIRECTORY /export/CORE/CommonPersistent root nms 0775 $1 && 
+		{ 
+				G_PASS_FLAG=1; 
+		log "Invalid CORE/CommonPersistent"; 
+		}
+        CHECK_DIRECTORY /export/CORE/CommonPersistent/configuration root nms 0775 $1 &&
+		{ 
+				G_PASS_FLAG=1; 
+		log "Invalid CORE configuration"; 
+		}
+        CHECK_DIRECTORY /export/CORE/CommonPersistent/Software root nms 0775 $1 && 
+		{ 
+				G_PASS_FLAG=1; 
+		log "Invalid CORE Software";
+		}
+        CHECK_DIRECTORY /export/CORE/CommonPersistent/LICENSE root nms 0775 $1 &&
+		{ 
+				G_PASS_FLAG=1; 
+		log "Invalid CORE LICENSE";
+		}
+        CHECK_DIRECTORY /export/CORE/CommonPersistent/Backup root nms 0775 $1 &&
+		{ 
+				G_PASS_FLAG=1;
+		log "Invalid CORE Backup"; 
+		}
+        return 0
+}
+
+
+#
+#       COPYRIGHT (C) ERICSSON RADIO SYSTEMS AB, Sweden
+#
+#       The copyright to the content(s) herein is the property of
+#       Ericsson Radio Systems AB, Sweden.
+#
+#       The content(s) may be used and/or copied only with the written
+#       permission from Ericsson Radio Systems AB or in accordance with
+#       the terms and conditions stipulated in the agreement/contract
+#       under which the content(s)  has been supplied.
+#
+#------------------------------------------------------------------------
+#
+# ========================================
+# tst_LDAP.lib #AT_ldap.sh
+# ========================================
+#
+# Provides functions:
+# LDAP_SERVER_UP
+# LDAP_GET_DOMAIN_DN_FORMAT
+# LDAP_DOMAIN_EXISTS
+# LDAP_DOMAIN_EMPTY
+# LDAP_DOMAIN_ISOLATED
+# LDAP_DOMAIN_REFERRAL
+# LDAP_USER_EXISTS
+# LDAP_GROUP_EXISTS
+# LDAP_GROUP_USER_EXISTS
+# LDAP_CREATE_DOMAIN # Need to be tested with OSS
+# LDAP_DELETE_DOMAIN # Need to be tested with OSS
+# LDAP_CREATE_USER
+# LDAP_DELETE_USER
+# LDAP_CREATE_GROUP
+# LDAP_DELETE_GROUP
+# LDAP_GET_DEFAULT_DOMAIN
+# LDAP_PROXY_AGENT_CREATE
+# LDAP_PROXY_AGENT_EXISTS
+# LDAP_PROXY_AGENT_VALIDATE
+# LDAP_SET_DEFAULT_DOMAIN
+
+# TODO hostname, password and port number are all hard-coded at the moment
+#
+# General ldapsearch return codes:
+# 1		(Invalid syntax)
+# 32	No such entry
+# 34	Invalid DN Syntax
+# 48	Invalid credentials (bad bindDN or bad password)
+# 49	Invalid credentials (wrong password)
+# 50	Insufficient Access Rights (got this when using ldapcompare)
+# 89	(bad value to option)
+# 91	Connect Error (bad port)
+#http://docs.oracle.com/javase/tutorial/jndi/ldap/exceptions.html
+
+# LDAP COMMON VALUES
+HOSTNAME=$(hostname)
+LDAP_PORT=389
+LDAP_SUPERUSER_PASSWD="ldappass"
+G_DOMAIN_NAME_1="1.com"
+G_DOMAIN_NAME_2="2.com"
+set -o pipefail
+
+invalid_params() {
+	# General usage statement
+	echo -e "\033[44;36mInvalid parameters passed\033[0m"
+	echo "Usage: ${*}"
+}
+
+LDAP_SERVER_UP() {
+	# Determines whether the LDAP server is running or not
+	#
+	# Return codes:
+	# 0 LDAP running
+	# 1 LDAP not running (or missing)
+
+	
+	# simple search to see if it is running, so we can verify quickly like this:
+	/usr/bin/ldapsearch  -LLLx -b "" -s base "objectclass=*" namingcontexts 
+	[ $? -ne 0 ] && return 1
+	return 0
+}
+
+LDAP_GET_DOMAIN_DN_FORMAT() {
+        local domain_dot=$1
+        local domain_dn=""
+        local buffer
+        local dc
+
+        [[ -z "${domain_dot}" ]] && {
+                echo ""
+                return 1
+        }
+
+        buffer=$(echo ${domain_dot} | sed 's/\./ /g')
+        for dc in ${buffer}; do
+                if [ -z "${domain_dn}" ]; then
+                        domain_dn="dc=${dc}"
+                else
+                        domain_dn="${domain_dn},dc=${dc}"
+                fi
+        done
+        echo ${domain_dn}
+        return 0
+}
+# Get the current default domain and assign it to a variable
+LDAP_GET_DEFAULT_DOMAIN() {
+    # Default domain is signified by extension
+	default_domain_path=$(ls ${PATH_DIR}/ldap_domain_settings/*.default_domain)
+	current_default_domain=${default_domain_path%%.default_domain}
+	current_default_domain=${current_default_domain:36}
+	echo ${current_default_domain}
+	return 0
+
+}
+LDAP_SET_DEFAULT_DOMAIN() {
+        # Set Default LDAP domain
+        # Parameters: $domain
+        #
+        # Return codes
+        # 1             No domain argument specified
+        # 2             Domain doesn't exist
+        # 3             Failed to create expect input file
+        # 4             Failed to create expect output file from input
+        # 5             Error executing expect script
+        # 6             Domain does not exist after completeion of expect script
+        local domain=$1
+        [ -z "$domain" ] && { echo "ERROR: [LDAP_SET_DEFAULT_DOMAIN] requires domain argument"; return 1; }
+
+        # Check if domain doesn't exists
+        LDAP_DOMAIN_EXISTS $domain || {
+                echo "Domain given doesn't exist"
+                return 2
+        }
+
+        local superUserPasswd=${LDAP_SUPERUSER_PASSWD:-ldappass}
+        local filePrefix=setdefaultDomain
+# ----- START HERE DOCUMENT -----
+cat > ${filePrefix}.in << EOF || { echo "ERROR: failed to make input file ${filePrefix}.in" ; return 3; }
+LDAP Directory Manager DN*
+
+LDAP Directory Manager password:
+$superUserPasswd
+New default LDAP domain*
+$domain
+Continue to set the default domain to*
+y
+EOF
+# ----- END HERE DOCUMENT -----
+        # Generate Expect script from input file
+        #${AT_BIN}/con_ex.bsh -d ${filePrefix}.in -o ${filePrefix}.exp -c "${PATH_DIR}/bin/set_default_ldap_domain.sh" -r || {
+        createExpect ${filePrefix}.in ${filePrefix}.exp "${PATH_DIR}/bin/set_default_ldap_domain.sh" || {
+                echo "ERROR: [LDAP_SET_DEFAULT_DOMAIN] Could not create expect output script from input file ${filePrefix}.in"
+                return 4
+        }
+        # Execute expect script to add domain
+        /usr/local/bin/expect ${filePrefix}.exp  && {
+                rm  ${filePrefix}.in ${filePrefix}.exp
+                echo "ERROR: [LDAP_SET_DEFAULT_DOMAIN] set default domain $domain, error code $?"
+                return 5
+        }
+        rm  ${filePrefix}.in ${filePrefix}.exp
+        
+        return 0
+
+}
+
+
+LDAP_DOMAIN_EXISTS() {
+	# Determines if the given LDAP domain is present
+	# Parameters: domain
+	#
+	# Return codes
+	# 0		Domain exists
+	# 1		Domain does not exist
+	if [ $# -ne 1 ]; then
+		invalid_params $FUNCNAME domain
+		return 1
+	fi
+
+	local dmn=$(LDAP_GET_DOMAIN_DN_FORMAT $1)
+	/usr/bin/ldapsearch -D "cn=Directory Manager" -b "${dmn}" -s base -h $HOSTNAME -p $LDAP_PORT -w $LDAP_SUPERUSER_PASSWD "objectclass=*"
+	return $?
+}
+
+LDAP_DOMAIN_EMPTY() {
+	# Determines if the given LDAP domain contains users
+	# Parameters: domain
+	#
+	# Return codes
+	# 0     Domain has no users
+	# 1     Domain has users
+	# 2     Domain not found
+	if [ $# -ne 1 ]; then
+		invalid_params $FUNCNAME domain
+		return 1
+	fi
+	
+	LDAP_DOMAIN_EXISTS $1
+	[ $? -eq 0 ] || return 2
+
+	local dmn=$(LDAP_GET_DOMAIN_DN_FORMAT $1)
+	# We need to check in the ou=people container for users
+	dmn="ou=people,$dmn"
+	# POSIX User account entries
+	entries=`/usr/bin/ldapsearch -b "${dmn}" -s sub -h $HOSTNAME -p $LDAP_PORT -w $LDAP_SUPERUSER_PASSWD -D "cn=Directory Manager" "objectclass=posixAccount" uid | grep "^uid:" | wc -l`
+
+	# If entries is not set, set it to -1, otherwise check and see if it is less than or equal to zero
+	[ ${entries:- -1} -le 0 ] && return 0
+	return 1
+}
+
+LDAP_USER_EXISTS() {
+	# Determines if the user given exists
+	# Parameters: $domain $user
+	#
+	# Return codes
+	# 0	 User exists
+	# 1	 user does not exist
+	# 2	 Domain not found
+
+	if [ "$#" -ne 2 ]; then
+		invalid_params $FUNCNAME domain user
+		return 1
+	fi
+	LDAP_DOMAIN_EXISTS $1
+	[ $? -eq 0 ] || return 2
+
+	local dmn=$(LDAP_GET_DOMAIN_DN_FORMAT $1)
+	users=`/usr/bin/ldapsearch -b "$dmn" -s sub -h $HOSTNAME -p $LDAP_PORT -w $LDAP_SUPERUSER_PASSWD -D "cn=Directory Manager" "objectclass=posixAccount"|awk '/^uid:/{print $2}'`
+	[ $? -ne 0 ] && return $?
+
+	for user in $users; do
+		if [ "${user}" == "${2}" ]; then
+			return 0
+		fi
+	done
+	return 1
+}
+
+LDAP_GROUP_EXISTS() {
+	# Determines if a group exists
+	# Parameters: $domain $group
+	#
+	# Return codes
+	# 0		Group exists
+	# 1		Group does not exist
+	# 2		Domain not found
+	if [ $# -ne 2 ]; then
+		invalid_params $FUNCNAME domain group
+	fi
+	LDAP_DOMAIN_EXISTS $1
+	[ $? -eq 0 ] || return 2
+	local dmn=$(LDAP_GET_DOMAIN_DN_FORMAT $1)
+	# can select just the group we are searching for by using '-s base' here
+	/usr/bin/ldapsearch -b "cn=$2,ou=group,$dmn" -s base -h $HOSTNAME -p $LDAP_PORT -w $LDAP_SUPERUSER_PASSWD -D "cn=Directory Manager" "objectclass=posixGroup" 
+	[ $? -eq 32 ] && return 1
+	return 0
+}
+
+LDAP_GROUP_USER_EXISTS() {
+        # $domain $group $user
+        #
+        # Return codes
+        # 0             User exists in group
+        # 1             User exists, but not in group
+        # 2             domain does not exist
+        # 3             Group does not exist
+        # 4             User does not exist
+        if [ "$#" -ne 3 ]; then
+                invalid_params $FUNCNAME domain group user
+        fi
+
+        # XXX These three functions cause LDAP_DOMAIN_EXISTS to be run thrice!!
+        LDAP_DOMAIN_EXISTS $1
+        [ $? -eq 0 ] || return 2
+        LDAP_GROUP_EXISTS $1 $2
+        [ $? -eq 0 ] || return 3
+        LDAP_USER_EXISTS $1 $3
+        [ $? -eq 0 ] || return 4
+
+        # Get GID of user
+	local dmn=$(LDAP_GET_DOMAIN_DN_FORMAT $1)
+        usergid=`/usr/bin/ldapsearch -b "uid=$3,ou=people,${dmn}" -s sub -h $HOSTNAME -p $LDAP_PORT -w $LDAP_SUPERUSER_PASSWD -D "cn=Directory Manager" "objectclass=*"|awk '/^gidNumber/{print $NF}'`
+        # and of group
+        groupgid=`/usr/bin/ldapsearch -b "cn=$2,ou=group,${dmn}" -s sub -h $HOSTNAME -p $LDAP_PORT -w $LDAP_SUPERUSER_PASSWD -D "cn=Directory Manager" "objectclass=*"|awk '/gidNumber/{print $NF}'`
+
+        [ "$usergid" == "$groupgid" ] || return 1
+        return 0
+}
+
+LDAP_CREATE_DOMAIN() {
+        # Create an LDAP domain
+        # Parameters: $domain $uniquename $vip $proxyagentPasswd $dataMaintenancePasswd $dataMigrationPasswd $dnsDomain
+        #
+        # Return codes
+	# 1		No domain argument specified
+	# 2		Domain already exists
+	# 3		Failed to create expect input file
+	# 4 		Failed to create expect output file from input
+	# 5		Error executing expect script
+	# 6 		Domain does not exist after completeion of expect script
+        local domain=$1
+        [ -z "$domain" ] && { echo "ERROR: [LDAP_CREATE_DOMAIN] requires domain argument"; return 1; }
+
+	# Check if domain already exists
+	LDAP_DOMAIN_EXISTS $domain && {
+		echo "Domain already exists"
+		return 2
+	}
+
+	# Variable declaration for expect file input
+        local superUserPasswd=${LDAP_SUPERUSER_PASSWD:-ldappass}
+        local uniqueName=${2:-ossmaster}
+        local vip=${3:-192.168.0.5}
+        local proxyagentPasswd=${4:-ldappass}
+        local dataMaintenancePasswd=${5:-ldappass}
+        local dataMigrationPasswd=${6:-ldappass}
+	local dns_domain=$(awk 'NR==1{print $2}' /etc/resolv.conf)
+	local dnsDomain=${7:-$dns_domain}
+        local filePrefix=createDomain
+
+# ----- START HERE DOCUMENT -----
+cat > ${filePrefix}.in << EOF || { echo "ERROR: failed to make input file ${filePrefix}.in" ; return 3; }
+DNS Domain Name <e.g. dns.companyname.com>*
+$dnsDomain
+Enter a unique name for the masterservice of the OSS RC system using this LDAP domain:
+$uniqueName
+Enter IP address for the masterservice of the OSS RC system using this LDAP Domain:
+$vip
+New LDAP domain name <e.g. ldap.companyname.com>*
+$domain
+LDAP Directory Manager password:
+$superUserPasswd
+LDAP name service data migration password:
+$dataMigrationPasswd
+Re-enter password:
+$dataMigrationPasswd
+LDAP name service data maintenence password:
+$dataMaintenancePasswd
+Re-enter password:
+$dataMaintenancePasswd
+LDAP name service proxyagent password:
+$proxyagentPasswd
+Re-enter password:
+$proxyagentPasswd
+Are the values ok*
+y
+EOF
+# ----- END HERE DOCUMENT -----
+        # Generate Expect script from input file
+        #${AT_BIN}/con_ex.bsh -d ${filePrefix}.in -o ${filePrefix}.exp -c "${PATH_DIR}/bin/prepSUNDS.sh -c" -r || {
+      	
+
+	pkginfo ERICodj 2> /dev/null
+	ret=$?
+if [[ $ret -eq 0 ]]; then
+		createExpect ${filePrefix}.in ${filePrefix}.exp "${PATH_DIR}/bin/prepOPENDJ.sh -c" || {
+                echo "ERROR: [LDAP_CREATE_DOMAIN] Could not create expect output script from input file ${filePrefix}.in"
+                return 4
+        }
+
+else
+        createExpect ${filePrefix}.in ${filePrefix}.exp "${PATH_DIR}/bin/prepSUNDS.sh -c" || {
+                echo "ERROR: [LDAP_CREATE_DOMAIN] Could not create expect output script from input file ${filePrefix}.in"
+                return 4
+        }
+
+fi
+
+ 
+	# createExpect ${filePrefix}.in ${filePrefix}.exp "${PATH_DIR}/bin/prepSUNDS.sh -c" || {
+        #        echo "ERROR: [LDAP_CREATE_DOMAIN] Could not create expect output script from input file ${filePrefix}.in"
+        #        return 4
+        #}
+        # Execute expect script to add domain
+        /usr/local/bin/expect ${filePrefix}.exp  || {
+                rm  ${filePrefix}.in ${filePrefix}.exp
+                echo "ERROR: [LDAP_CREATE_DOMAIN] creating domain $domain, error code $?"
+                return 5
+        }
+        rm  ${filePrefix}.in ${filePrefix}.exp
+        LDAP_DOMAIN_EXISTS $domain || { echo "ERROR: [LDAP_CREATE_DOMAIN] Failed to create domain $domain"; return 6; }
+
+        return 0
+}
+
+LDAP_DELETE_DOMAIN() {
+        # Delete an LDAP domain
+        # Parameters: $domain
+        #
+        # Return codes
+	# 1		No domain argument specified
+	# 2		Domain doesn't exist
+	# 3		Failed to create expect input file
+	# 4 		Failed to create expect output file from input
+	# 5		Error executing expect script
+	# 6 		Domain does not exist after completeion of expect script
+        local domain=$1
+        [ -z "$domain" ] && { echo "ERROR: [LDAP_DELETE_DOMAIN] requires domain argument"; return 1; }
+
+	# Check if domain doesn't exists
+	LDAP_DOMAIN_EXISTS $domain || {
+		echo "Domain given doesn't exist"
+		return 2
+	}
+
+        local superUserPasswd=${LDAP_SUPERUSER_PASSWD:-ldappass}
+	local filePrefix=deleteDomain
+# ----- START HERE DOCUMENT -----
+cat > ${filePrefix}.in << EOF || { echo "ERROR: failed to make input file ${filePrefix}.in" ; return 3; }
+LDAP Directory Manager DN*
+
+LDAP Directory Manager password:
+$superUserPasswd
+Enter LDAP domain to delete* 
+$domain
+Continue to remove LDAP name service domain*
+y
+EOF
+# ----- END HERE DOCUMENT -----
+        # Generate Expect script from input file
+        #${AT_BIN}/con_ex.bsh -d ${filePrefix}.in -o ${filePrefix}.exp -c "${PATH_DIR}/bin/prepSUNDS.sh -r" -r || {
+        
+	pkginfo ERICodj 2> /dev/null
+	ret=$?
+if [[ $ret -eq 0 ]]; then
+		createExpect ${filePrefix}.in ${filePrefix}.exp "${PATH_DIR}/bin/prepOPENDJ.sh -c" || {
+                echo "ERROR: [LDAP_CREATE_DOMAIN] Could not create expect output script from input file ${filePrefix}.in"
+                return 4
+        }
+
+else
+        createExpect ${filePrefix}.in ${filePrefix}.exp "${PATH_DIR}/bin/prepSUNDS.sh -c" || {
+                echo "ERROR: [LDAP_CREATE_DOMAIN] Could not create expect output script from input file ${filePrefix}.in"
+                return 4
+        }
+
+fi
+
+
+
+
+	#createExpect ${filePrefix}.in ${filePrefix}.exp "${PATH_DIR}/bin/prepSUNDS.sh -r" || {
+       #         echo "ERROR: [LDAP_DELETE_DOMAIN] Could not create expect output script from input file ${filePrefix}.in"
+       #         return 4
+       # }
+        # Execute expect script to add domain
+        /usr/local/bin/expect ${filePrefix}.exp  || {
+                rm  ${filePrefix}.in ${filePrefix}.exp
+                echo "ERROR: [LDAP_DELETE_DOMAIN] deleting domain $domain, error code $?"
+                return 5
+        }
+        rm  ${filePrefix}.in ${filePrefix}.exp
+        LDAP_DOMAIN_EXISTS $domain && { echo "ERROR: [LDAP_DELETE_DOMAIN] Failed to delete domain $domain"; return 6; }
+        return 0
+}
+
+LDAP_CREATE_USER() {
+        # Create an LDAP user
+	# Ldap user id will be next available UID
+        # Parameters: Domain Username Password
+        #
+        # Return codes
+        # 1             No user name or password specified
+        # 2             User already exists
+	# 3		Failed to create expect input file
+	# 4 		Failed to create expect output file from input
+	# 5		Error executing expect script
+	# 6 		Domain does not exist after completeion of expect script
+	if [ "$#" -ne 3 ]; then
+                invalid_params $FUNCNAME domain user userPassword
+		return 1
+        fi
+	local uc_domain=$1
+        local uc_user=$2
+	local uc_userPasswd=$3
+
+        # Check if domain already exists
+        LDAP_USER_EXISTS $uc_domain $uc_user && {
+                echo "User already exists"
+                return 2
+        }
+	
+	if [[ ${#uc_user} -gt 8 ]]; then
+		echo "User name is too long"
+		return 2
+	fi
+        # Variable declaration for expect file input
+        local superUserPasswd=${LDAP_SUPERUSER_PASSWD:-ldappass}
+        local filePrefix=createUser
+
+# ----- START HERE DOCUMENT -----
+cat > ${filePrefix}.in << EOF || { echo "ERROR: failed to make input file ${filePrefix}.in" ; return 3; }
+LDAP Directory Manager password:
+$superUserPasswd
+New local user name:
+$uc_user
+Start of uidNumber search range*
+
+End of uidNumber search range*
+
+New local user uidNumber*
+
+New local user password*
+$uc_userPasswd
+Re-enter password*
+$uc_userPasswd
+New local user category*
+
+New local user description*
+
+Continue to create local user*
+y
+EOF
+# ----- END HERE DOCUMENT -----
+        # Generate Expect script from input file
+        #${AT_BIN}/con_ex.bsh -d ${filePrefix}.in -o ${filePrefix}.exp -c "${PATH_DIR}/bin/add_user.sh -d $uc_domain" -r || {
+	createExpect ${filePrefix}.in ${filePrefix}.exp "${PATH_DIR}/bin/add_user.sh -d $uc_domain" || {
+                echo "ERROR: [LDAP_CREATE_USER] Could not create expect output script from input file ${filePrefix}.in"
+                return 4
+        }
+        # Execute expect script to add domain
+        /usr/local/bin/expect ${filePrefix}.exp  || {
+                rm  ${filePrefix}.in ${filePrefix}.exp
+                echo "ERROR: [LDAP_CREATE_USER] creating user $uc_user, error code $?"
+                return 5
+        }
+        rm  ${filePrefix}.in ${filePrefix}.exp
+        LDAP_USER_EXISTS $uc_domain $uc_user || { echo "ERROR: [LDAP_CREATE_USER] Failed to create user $uc_user"; return 6; }
+        return 0
+}
+
+LDAP_DELETE_USER() {
+        # Delete an LDAP user 
+        # Parameters: $domain $user
+        #
+        # Return codes
+        # 1             Incorrect arguments specified
+        # 4             Failed to create expect output file from input
+        # 5             Error executing expect script
+        # 6             Domain does not exist after completeion of expect script
+        if [ "$#" -ne 2 ]; then
+                invalid_params $FUNCNAME domain user
+		return 1
+        fi
+
+        local ud_domain=$1
+	local ud_user=$2
+        [ -z "$ud_domain" ] && { echo "ERROR: [LDAP_DELETE_USER] requires domain argument"; return 1; }
+        [ -z "$ud_user" ] && { echo "ERROR: [LDAP_DELETE_USER] requires user argument"; return 1; }
+
+        # Check if domain doesn't exists
+        LDAP_USER_EXISTS $ud_domain $ud_user || {
+                echo "User given doesn't exist, exiting"
+                return 2
+        }
+
+        local superUserPasswd=${LDAP_SUPERUSER_PASSWD:-ldappass}
+        local filePrefix=deleteUser 
+# ----- START HERE DOCUMENT -----
+cat > ${filePrefix}.in << EOF || { echo "ERROR: failed to make input file ${filePrefix}.in" ; return 3; }
+LDAP Directory Manager password:
+$superUserPasswd
+Local user name: 
+$ud_user
+Continue to delete local user 
+y
+EOF
+# ----- END HERE DOCUMENT -----
+        # Generate Expect script from input file
+       # ${AT_BIN}/con_ex.bsh -d ${filePrefix}.in -o ${filePrefix}.exp -c "${PATH_DIR}/bin/del_user.sh -d $ud_domain" -r || {
+        createExpect ${filePrefix}.in ${filePrefix}.exp "${PATH_DIR}/bin/del_user.sh -d $ud_domain" || {
+                echo "ERROR: [LDAP_DELETE_USER] Could not create expect output script from input file ${filePrefix}.in"
+                return 4
+        }
+        # Execute expect script to add domain
+        /usr/local/bin/expect ${filePrefix}.exp  || {
+                rm  ${filePrefix}.in ${filePrefix}.exp
+                echo "ERROR: [LDAP_DELETE_USER] deleting $ud_user, error code $?"
+                return 5
+        }
+        rm  ${filePrefix}.in ${filePrefix}.exp
+        LDAP_USER_EXISTS $ud_domain $ud_user&& { echo "ERROR: [LDAP_DELETE_USER] Failed to delete user $ud_user"; return 6; }
+        return 0
+}
+
+LDAP_CREATE_GROUP() {
+        # Create an LDAP group
+        # Parameter: Domain Group
+        # Return codes
+        # 1             No user name or password specified
+        # 2             Group already exists / Group name is too long
+	# 3		Failed to create expect input file
+	# 4 		Failed to create expect output file from input
+	# 5		Error executing expect script
+	# 6 		Domain does not exist after completeion of expect script
+	if [ "$#" -ne 2 ]; then
+                invalid_params $FUNCNAME domain group
+		return 1
+        fi
+	local gc_domain=$1
+        local gc_group=$2
+
+        # Check if domain already exists
+        LDAP_GROUP_EXISTS $gc_domain $gc_group && {
+                echo "Group already exists"
+                return 2
+        }
+	
+	if [[ ${#gc_group} -gt 8 ]]; then
+		echo "Group name is too long"
+		return 2
+	fi
+
+        # Variable declaration for expect file input
+        local superUserPasswd=${LDAP_SUPERUSER_PASSWD:-ldappass}
+        local filePrefix=createGroup
+
+# ----- START HERE DOCUMENT -----
+cat > ${filePrefix}.in << EOF || { echo "ERROR: failed to make input file ${filePrefix}.in" ; return 3; }
+LDAP Directory Manager password:
+$superUserPasswd
+New local group name: 
+$gc_group
+Start of gidNumber search range* 
+
+End of gidNumber search range* 
+
+New local group gidNumber*
+
+Continue to create local group*
+y
+EOF
+# ----- END HERE DOCUMENT -----
+        # Generate Expect script from input file
+        #${AT_BIN}/con_ex.bsh -d ${filePrefix}.in -o ${filePrefix}.exp -c "${PATH_DIR}/bin/add_group.sh -d $gc_domain" -r || {
+        createExpect ${filePrefix}.in ${filePrefix}.exp "${PATH_DIR}/bin/add_group.sh -d $gc_domain" || {
+                echo "ERROR: [LDAP_CREATE_GROUP] Could not create expect output script from input file ${filePrefix}.in"
+                return 4
+        }
+        # Execute expect script to add domain
+        /usr/local/bin/expect ${filePrefix}.exp  || {
+                rm  ${filePrefix}.in ${filePrefix}.exp
+                echo "ERROR: [LDAP_CREATE_GROUP] creating group $gc_group, error code $?"
+                return 5
+        }
+        rm  ${filePrefix}.in ${filePrefix}.exp
+        LDAP_GROUP_EXISTS $gc_domain $gc_group || { echo "ERROR: [LDAP_CREATE_GROUP] Failed to create group $gc_group"; return 6; }
+        return 0
+}
+
+LDAP_DELETE_GROUP() {
+        # Delete an LDAP group
+	# Parameters: Domain Group
+        #
+        # Return codes
+        # 1             Incorrect arguments specified
+        # 4             Failed to create expect output file from input
+        # 5             Error executing expect script
+        # 6             Domain does not exist after completeion of expect script
+        if [ "$#" -ne 2 ]; then
+                invalid_params $FUNCNAME domain group 
+		return 1
+        fi
+
+        local gd_domain=$1
+	local gd_group=$2
+        [ -z "$gd_domain" ] && { echo "ERROR: [LDAP_DELETE_GROUP] requires domain argument"; return 1; }
+        [ -z "$gd_group" ] && { echo "ERROR: [LDAP_DELETE_GROUP] requires group argument"; return 1; }
+
+        # Check if group doesn't exists
+        LDAP_GROUP_EXISTS $gd_domain $gd_group|| {
+                echo "Group given doesn't exist, exiting..."
+                return 2
+        }
+
+        local superUserPasswd=${LDAP_SUPERUSER_PASSWD:-ldappass}
+        local filePrefix=deleteGroup
+# ----- START HERE DOCUMENT -----
+cat > ${filePrefix}.in << EOF || { echo "ERROR: failed to make input file ${filePrefix}.in" ; return 3; }
+LDAP Directory Manager password:
+$superUserPasswd
+Local group name: 
+$gd_group
+Local gidNumber*
+
+Continue to delete local group*
+y 
+EOF
+# ----- END HERE DOCUMENT -----
+        # Generate Expect script from input file
+        #${AT_BIN}/con_ex.bsh -d ${filePrefix}.in -o ${filePrefix}.exp -c "${PATH_DIR}/bin/del_group.sh -d $gd_domain" -r || {
+	createExpect ${filePrefix}.in ${filePrefix}.exp "${PATH_DIR}/bin/del_group.sh -d $gd_domain" || {
+                echo "ERROR: [LDAP_DELETE_GROUP] Could not create expect output script from input file ${filePrefix}.in"
+                return 4
+        }
+        # Execute expect script to add domain
+        /usr/local/bin/expect ${filePrefix}.exp  || {
+                rm  ${filePrefix}.in ${filePrefix}.exp
+                echo "ERROR: [LDAP_DELETE_GROUP] deleting $gd_group, error code $?"
+                return 5
+        }
+        rm  ${filePrefix}.in ${filePrefix}.exp
+        LDAP_GROUP_EXISTS $gd_domain $gd_group && { echo "ERROR: [LDAP_DELETE_GROUP] Failed to delete group $gd_group"; return 6; }
+        return 0
+}
+
+LDAP_PROXY_AGENT_CREATE () {
+	local user=$1
+	local domain=$2
+	local passwd=${3:-passw0rd}
+	local filePrefix=proxyCreate
+
+# Use here document to generate input file
+# ----- START HERE DOCUMENT -----
+        cat > ${filePrefix}.in << EOF || { echo "ERROR: failed to make expect template file ${filePrefix}.in" ; return 1; }
+LDAP Directory Manager password:
+$LDAP_SUPERUSER_PASSWD
+Enter password for COM proxyagent*
+$passwd
+Re-enter password*
+$passwd
+Please confirm that you want to proceed with requested actions - Yes or No*
+Yes
+EOF
+# ----- END HERE DOCUMENT -----
+
+	# Generate expect script from input file
+	COMMAND_STRING="${PATH_DIR}/bin/manage_COM.bsh -a proxy -d $domain -P $user -y"
+	#${AT_BIN}/con_ex.bsh -d ${filePrefix}.in -o ${filePrefix}.exp -c "$COMMAND_STRING" -r || {
+        createExpect ${filePrefix}.in ${filePrefix}.exp "$COMMAND_STRING" || {
+		echo "ERROR: Could not create input file ${filePrefix}.in"
+		rm ${filePrefix}.in
+		return 1
+	}
+
+	/usr/local/bin/expect ${filePrefix}.exp  && {
+		echo "ERROR: Failed to create proxy agent user $G_USER_NAME $?"
+		rm ${filePrefix}.exp ${filePrefix}.in
+		return 2
+	}
+	rm ${filePrefix}.exp ${filePrefix}.in
+	return 0
+}
+LDAP_PROXY_AGENT_EXISTS () {
+        local user=$1
+        local domain=$2
+        /usr/bin/ldapsearch  -LLLx -D "cn=directory manager" -w $LDAP_SUPERUSER_PASSWD -b "cn=$user,ou=proxyagent,ou=com,$domain"  "objectclass=*" 
+        [ $? -eq 32 ] || return 0
+		return $?
+}
+
+LDAP_PROXY_AGENT_VALIDATE () {
+	local user=$1
+	local domain=$2
+	local passwd=$3
+	/usr/bin/ldapsearch -LLLx -D "cn=$user,ou=proxyagent,ou=com,$domain"  -w $passwd -b "cn=$user,ou=proxyagent,ou=com,$domain"  "objectclass=*"  
+	
+	[ $? -eq 32 ] || return 0
+	return $?
+}

@@ -1,0 +1,8 @@
+<!DOCTYPE suite SYSTEM "http://testng.org/testng-1.0.dtd" >
+<suite name="preMigSuite">
+    <test name="preMigSuite">
+        <classes>
+       <class name="com.ericsson.oss.cominf.test.cases.preMig"/>
+        </classes>
+  </test>
+</suite>

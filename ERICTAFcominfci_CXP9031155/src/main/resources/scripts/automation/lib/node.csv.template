@@ -1,0 +1,2 @@
+executeFile,file,lib,nodecreate,nodemodify,nodedelete, expectedExit,changeDir,fileLocation,timeout,exitShell,
+file.execute,##TC_SHELL##,commonFunctions.lib,##TC_NODE_CREATE##,##TC_NODE_MODIFY##,##TC_NODE_DELETE##,0,change.dir,/tmp,3000,exit,

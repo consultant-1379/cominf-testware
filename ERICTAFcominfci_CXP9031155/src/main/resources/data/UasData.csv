@@ -1,0 +1,2 @@
+executeFile,file,expectedExit,changeDir,fileLocation,timeout,exitShell,
+file.execute,uasData.sh,0,change.dir,/tmp,30,exit,

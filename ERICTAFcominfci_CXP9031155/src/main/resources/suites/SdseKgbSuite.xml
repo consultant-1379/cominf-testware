@@ -1,0 +1,19 @@
+<!DOCTYPE suite SYSTEM "http://testng.org/testng-1.0.dtd" >
+<suite name="ericSdse">
+    <test name="ericSdse">
+        <classes>
+            <class name="com.ericsson.oss.cominf.test.cases.ericSdee">
+		<methods>
+			<exclude name="OSS40738Func02" />
+			<exclude name="OSS40738Func20" />
+			<exclude name="OSS40738Func28" />
+			<exclude name="OSS40738Func29" />
+			<exclude name="OSS40738Func41" />
+			<exclude name="OSS40738Func27" />
+		</methods> 
+       </class>		
+			
+        </classes>
+  </test>
+
+</suite>

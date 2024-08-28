@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE Model SYSTEM "/opt/ericsson/arne/etc/arne6_3.dtd">
+<Model version="1" importVersion="6.3">
+        <Create>
+                <Site userLabel="HS77214_SITE">
+                        <altitude string="0"/>
+                        <location string="GRAN"/>
+                        <longitude string="0"/>
+                        <latitude string="0"/>
+                        <worldTimeZoneId string="GB-Eire"/>
+                        <freeText string=""/>
+                        <datum string="wgs84"/>
+                </Site>
+              <SubNetwork userLabel="GRAN" networkType="IPRAN">
+         <ManagedElement sourceType="SIU">
+            <ManagedElementId string="HS77214_GRAN_STN"/>
+            <primaryType type="STN"/>
+            <managedElementType types=""/>
+            <associatedSite string="Site=HS77214_SITE"/>
+            <nodeVersion string="T12A"/>
+            <platformVersion string=""/>
+            <swVersion string=""/>
+            <vendorName string="Not Ericsson"/>
+            <userDefinedState string="Active"/>
+            <managedServiceAvailability int="1"/>
+            <isManaged boolean="true"/>
+            <connectionStatus string="ON"/>
+            <Connectivity>
+               <DEFAULT>
+                  <emUrl url="http://192.168.125.225:80/"/>
+                  <ipAddress ip_v4="192.168.125.225"/>
+                  <hostname string="HS77214_GRAN_STN"/>
+                  <nodeSecurityState state="ON"/>
+                  <boardId string=""/>
+                  <Protocol number="0">
+                     <protocolType string="SNMP"/>
+                     <port int="1161"/>
+                     <protocolVersion string="v1+v2"/>
+                     <securityName string=""/>
+                     <authenticationMethod string=""/>
+                     <encryptionMethod string=""/>
+                     <communityString string="public"/>
+                     <context string=""/>
+                     <namingUrl string=""/>
+                     <namingPort int=""/>
+                     <notificationIRPAgentVersion string=""/>
+                     <alarmIRPAgentVersion string=""/>
+                     <notificationIRPNamingContext context=""/>
+                     <alarmIRPNamingContext context=""/>
+                  </Protocol>
+                  <Protocol number="1">
+                     <protocolType string="SSH"/>
+                     <port int="22"/>
+                     <protocolVersion string=""/>
+                     <securityName string=""/>
+                     <authenticationMethod string=""/>
+                     <encryptionMethod string=""/>
+                     <communityString string=""/>
+                     <context string=""/>
+                     <namingUrl string=""/>
+                     <namingPort int=""/>
+                     <notificationIRPAgentVersion string=""/>
+                     <alarmIRPAgentVersion string=""/>
+                     <notificationIRPNamingContext context=""/>
+                     <alarmIRPNamingContext context=""/>
+                  </Protocol>
+                  <Browser>
+                     <browser string=""/>
+                     <browserURL string=""/>
+                     <bookname string=""/>
+                  </Browser>
+               </DEFAULT>
+            </Connectivity>
+            <Tss>
+               <Entry>
+                  <System string="HS77214_GRAN_STN"/>
+                  <Type string="SECURE"/>
+                  <User string="HS77214_GRAN_STN"/>
+                  <Password string="secret"/>
+               </Entry>
+               <Entry>
+                  <System string="HS77214_GRAN_STN"/>
+                  <Type string="NORMAL"/>
+                  <User string="HS77214_GRAN_STN"/>
+                  <Password string="secret"/>
+               </Entry>
+            </Tss>
+            <Relationship>
+               <AssociableNode TO_FDN="FtpServer=SMRSSLAVE-nedssv4,FtpService=swstore-nedssv4" AssociationType="ManagedElement_to_ftpSwStore"/>
+               <AssociableNode TO_FDN="FtpServer=SMRSSLAVE-nedssv4,FtpService=cmdown-nedssv4" AssociationType="ManagedElement_to_neTransientCmDown"
+/>
+               <AssociableNode TO_FDN="FtpServer=SMRSSLAVE-nedssv4,FtpService=cmup-nedssv4" AssociationType="ManagedElement_to_neTransientCmUp"/>
+               <AssociableNode TO_FDN="FtpServer=SMRSSLAVE-nedssv4,FtpService=pmup-nedssv4" AssociationType="ManagedElement_to_neTransientPm"/>
+               <AssociableNode TO_FDN="ManagementNode=ONRM" AssociationType="MgmtAssociation"/>
+            </Relationship>
+         </ManagedElement>
+                </SubNetwork>
+        </Create>
+</Model>
+
